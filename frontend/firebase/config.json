@@ -1,0 +1,12 @@
+{
+  "webAppConfig": {
+    "projectId": "project-660d3d62-dc1b-45aa-b24",
+    "appId": "1:206867496930:web:b606b4553909e2716643bb",
+    "apiKey": "AIzaSyDaOXmNlQVLf20rysO6RK4mRK-xtOjlcS0",
+    "authDomain": "project-660d3d62-dc1b-45aa-b24.firebaseapp.com",
+    "storageBucket": "project-660d3d62-dc1b-45aa-b24.firebasestorage.app",
+    "messagingSenderId": "206867496930",
+    "measurementId": "G-L2DTGB48KW"
+  },
+  "databaseId": "app-builder-de237e21"
+}
