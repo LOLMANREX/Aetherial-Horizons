@@ -1,0 +1,1285 @@
+import * as THREE from 'three';
+import { WeaponType } from '../types';
+
+export interface HumanoidCharacter {
+  group: THREE.Group;
+  bowObject: THREE.Object3D;
+  updateAnimation: (params: {
+    dt: number;
+    time: number;
+    speed: number;
+    forwardInput: number;
+    rightInput: number;
+    isSprinting: boolean;
+    isGrounded: boolean;
+    isSwimming: boolean;
+    headPitch: number;
+    equippedWeapon: WeaponType;
+    attackProgress: number; // 0 à 1 pendant un coup d'épée
+    bowDrawProgress: number; // 0 à 1 pendant qu'on bande l'arc
+    bowReleaseTimer: number; // > 0 juste après le lâcher de flèche
+    hasArrows: boolean;
+    isSeatedOnThrone?: boolean;
+    isCorrupted?: boolean;
+  }) => void;
+}
+
+export interface FirstPersonViewModel {
+  group: THREE.Group;
+  bowObject: THREE.Object3D;
+  updateAnimation: (params: {
+    dt: number;
+    time: number;
+    speed: number;
+    isSprinting: boolean;
+    isGrounded: boolean;
+    isSwimming: boolean;
+    equippedWeapon: WeaponType;
+    attackProgress: number;
+    bowDrawProgress: number;
+    bowReleaseTimer: number;
+    hasArrows: boolean;
+    isCorrupted?: boolean;
+  }) => void;
+}
+
+export function buildDetailedSwordMesh(): {
+  swordRoot: THREE.Group;
+  slashTrailMesh: THREE.Mesh;
+  setCorruptedMode: (corrupted: boolean) => void;
+} {
+  const swordRoot = new THREE.Group();
+
+  const leatherMat = new THREE.MeshStandardMaterial({
+    color: 0x4a2e1b,
+    roughness: 0.75,
+    flatShading: true,
+  });
+  const goldMat = new THREE.MeshStandardMaterial({
+    color: 0xfbbf24,
+    roughness: 0.3,
+    metalness: 0.7,
+    flatShading: true,
+  });
+  const steelMat = new THREE.MeshStandardMaterial({
+    color: 0xe2e8f0,
+    roughness: 0.2,
+    metalness: 0.85,
+    flatShading: true,
+  });
+  const crystalMat = new THREE.MeshStandardMaterial({
+    color: 0x22d3ee,
+    emissive: 0x06b6d4,
+    emissiveIntensity: 1.8,
+    roughness: 0.1,
+    flatShading: true,
+  });
+
+  const hilt = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.022, 0.026, 0.22, 6),
+    leatherMat
+  );
+  swordRoot.add(hilt);
+
+  const pommel = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.042, 0),
+    goldMat
+  );
+  pommel.position.set(0, -0.13, 0);
+  swordRoot.add(pommel);
+
+  const crossguard = new THREE.Mesh(
+    new THREE.BoxGeometry(0.26, 0.042, 0.06),
+    goldMat
+  );
+  crossguard.position.set(0, 0.12, 0);
+  swordRoot.add(crossguard);
+
+  const gem = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.042, 0),
+    crystalMat
+  );
+  gem.position.set(0, 0.12, 0);
+  swordRoot.add(gem);
+
+  const blade = new THREE.Mesh(
+    new THREE.BoxGeometry(0.06, 0.86, 0.02),
+    steelMat
+  );
+  blade.position.set(0, 0.56, 0);
+  blade.castShadow = true;
+  swordRoot.add(blade);
+
+  const tip = new THREE.Mesh(
+    new THREE.ConeGeometry(0.042, 0.14, 4),
+    steelMat
+  );
+  tip.position.set(0, 1.05, 0);
+  tip.rotation.y = Math.PI / 4;
+  swordRoot.add(tip);
+
+  const edgeGlow = new THREE.Mesh(
+    new THREE.BoxGeometry(0.022, 0.82, 0.025),
+    crystalMat
+  );
+  edgeGlow.position.set(0, 0.56, 0);
+  swordRoot.add(edgeGlow);
+
+  // Ailettes démoniaques / obsidienne supplémentaires pour le skin Lame du Néant (Mauvaise Fin)
+  const corruptedWingsGroup = new THREE.Group();
+  corruptedWingsGroup.visible = false;
+  for (const sign of [-1, 1]) {
+    const wing = new THREE.Mesh(
+      new THREE.ConeGeometry(0.045, 0.34, 4),
+      crystalMat
+    );
+    wing.position.set(sign * 0.14, 0.24, 0);
+    wing.rotation.z = -sign * 0.55;
+    corruptedWingsGroup.add(wing);
+
+    // Fix missing space in `const tooth` variable declaration
+    const tooth = new THREE.Mesh(
+      new THREE.ConeGeometry(0.028, 0.18, 4),
+      crystalMat
+    );
+    tooth.position.set(sign * 0.055, 0.65, 0);
+    tooth.rotation.z = -sign * 0.8;
+    corruptedWingsGroup.add(tooth);
+  }
+  swordRoot.add(corruptedWingsGroup);
+
+  const slashTrailMat = new THREE.MeshBasicMaterial({
+    color: 0x38bdf8,
+    transparent: true,
+    opacity: 0,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+
+  const slashTrailMesh = new THREE.Mesh(
+    new THREE.RingGeometry(0.45, 1.05, 14, 1, -0.3, Math.PI * 0.75),
+    slashTrailMat
+  );
+  slashTrailMesh.position.set(0, 0.55, 0);
+  slashTrailMesh.rotation.y = Math.PI / 2;
+  swordRoot.add(slashTrailMesh);
+
+  let currentCorruptedState = false;
+  const setCorruptedMode = (corrupted: boolean) => {
+    if (currentCorruptedState === corrupted) return;
+    currentCorruptedState = corrupted;
+    corruptedWingsGroup.visible = corrupted;
+    if (corrupted) {
+      steelMat.color.setHex(0x0f071e); // Lame d'obsidienne noire
+      goldMat.color.setHex(0x881337); // Garde carmin sombre
+      crystalMat.color.setHex(0xf43f5e); // Cœur runique rouge sang
+      crystalMat.emissive.setHex(0xe11d48);
+      slashTrailMat.color.setHex(0xf43f5e);
+      blade.scale.set(1.35, 1.12, 1.2);
+    } else {
+      steelMat.color.setHex(0xe2e8f0);
+      goldMat.color.setHex(0xfbbf24);
+      crystalMat.color.setHex(0x22d3ee);
+      crystalMat.emissive.setHex(0x06b6d4);
+      slashTrailMat.color.setHex(0x38bdf8);
+      blade.scale.set(1, 1, 1);
+    }
+  };
+
+  return { swordRoot, slashTrailMesh, setCorruptedMode };
+}
+
+export function buildDetailedBowMesh(): {
+  bowRoot: THREE.Group;
+  upperString: THREE.Mesh;
+  lowerString: THREE.Mesh;
+  nockedArrow: THREE.Group;
+  setCorruptedMode: (corrupted: boolean) => void;
+} {
+  const bowRoot = new THREE.Group();
+
+  const woodMat = new THREE.MeshStandardMaterial({
+    color: 0x5c361a,
+    roughness: 0.75,
+    flatShading: true,
+  });
+  const goldMat = new THREE.MeshStandardMaterial({
+    color: 0xfbbf24,
+    roughness: 0.3,
+    metalness: 0.7,
+    flatShading: true,
+  });
+  const crystalMat = new THREE.MeshStandardMaterial({
+    color: 0x22d3ee,
+    emissive: 0x06b6d4,
+    emissiveIntensity: 1.6,
+    flatShading: true,
+  });
+  const stringMat = new THREE.MeshBasicMaterial({ color: 0xe2e8f0 });
+
+  const grip = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.026, 0.026, 0.18, 6),
+    goldMat
+  );
+  bowRoot.add(grip);
+
+  const sightGem = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.032, 0),
+    crystalMat
+  );
+  sightGem.position.set(0, 0.06, -0.028);
+  bowRoot.add(sightGem);
+
+  const upperLimb = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.015, 0.024, 0.42, 6),
+    woodMat
+  );
+  upperLimb.position.set(0, 0.25, 0.085);
+  upperLimb.rotation.x = 0.44;
+  bowRoot.add(upperLimb);
+
+  const lowerLimb = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.024, 0.015, 0.42, 6),
+    woodMat
+  );
+  lowerLimb.position.set(0, -0.25, 0.085);
+  lowerLimb.rotation.x = -0.44;
+  bowRoot.add(lowerLimb);
+
+  const upperTip = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.025, 0),
+    goldMat
+  );
+  upperTip.position.set(0, 0.44, 0.18);
+  bowRoot.add(upperTip);
+
+  const lowerTip = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.025, 0),
+    goldMat
+  );
+  lowerTip.position.set(0, -0.44, 0.18);
+  bowRoot.add(lowerTip);
+
+  const upperString = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.004, 0.004, 0.44, 4),
+    stringMat
+  );
+  upperString.position.set(0, 0.22, 0.18);
+  bowRoot.add(upperString);
+
+  const lowerString = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.004, 0.004, 0.44, 4),
+    stringMat
+  );
+  lowerString.position.set(0, -0.22, 0.18);
+  bowRoot.add(lowerString);
+
+  const nockedArrow = new THREE.Group();
+  const shaftMat = new THREE.MeshBasicMaterial({ color: 0xfde047 });
+  const shaft = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.01, 0.01, 0.68, 5),
+    shaftMat
+  );
+  shaft.rotation.x = Math.PI / 2;
+  shaft.position.z = -0.14;
+  nockedArrow.add(shaft);
+
+  const arrowHead = new THREE.Mesh(
+    new THREE.ConeGeometry(0.028, 0.1, 5),
+    crystalMat
+  );
+  arrowHead.rotation.x = -Math.PI / 2;
+  arrowHead.position.z = -0.5;
+  nockedArrow.add(arrowHead);
+
+  bowRoot.add(nockedArrow);
+
+  let currentCorruptedState = false;
+  const setCorruptedMode = (corrupted: boolean) => {
+    if (currentCorruptedState === corrupted) return;
+    currentCorruptedState = corrupted;
+    if (corrupted) {
+      woodMat.color.setHex(0x0f071e);
+      goldMat.color.setHex(0x9f1239);
+      crystalMat.color.setHex(0xf43f5e);
+      crystalMat.emissive.setHex(0xe11d48);
+      stringMat.color.setHex(0xf43f5e);
+      shaftMat.color.setHex(0xf43f5e);
+    } else {
+      woodMat.color.setHex(0x5c361a);
+      goldMat.color.setHex(0xfbbf24);
+      crystalMat.color.setHex(0x22d3ee);
+      crystalMat.emissive.setHex(0x06b6d4);
+      stringMat.color.setHex(0xe2e8f0);
+      shaftMat.color.setHex(0xfde047);
+    }
+  };
+
+  return { bowRoot, upperString, lowerString, nockedArrow, setCorruptedMode };
+}
+
+/**
+ * Construit le personnage humain en 3ème personne ("L'Arpenteur d'Aetheria")
+ */
+export function createHumanoidCharacter(): HumanoidCharacter {
+  const rootGroup = new THREE.Group();
+
+  const bodyPivot = new THREE.Group();
+  bodyPivot.position.set(0, 0.9, 0);
+  rootGroup.add(bodyPivot);
+
+  const skinMat = new THREE.MeshStandardMaterial({
+    color: 0xf4c29f,
+    roughness: 0.65,
+    flatShading: true,
+  });
+  const hairMat = new THREE.MeshStandardMaterial({
+    color: 0x271c19,
+    roughness: 0.8,
+    flatShading: true,
+  });
+  const tunicMat = new THREE.MeshStandardMaterial({
+    color: 0x0f4c81,
+    roughness: 0.6,
+    flatShading: true,
+  });
+  const armorTrimMat = new THREE.MeshStandardMaterial({
+    color: 0x38bdf8,
+    roughness: 0.35,
+    metalness: 0.3,
+    flatShading: true,
+  });
+  const leatherMat = new THREE.MeshStandardMaterial({
+    color: 0x4a2e1b,
+    roughness: 0.75,
+    flatShading: true,
+  });
+  const pantsMat = new THREE.MeshStandardMaterial({
+    color: 0x1e293b,
+    roughness: 0.8,
+    flatShading: true,
+  });
+  const scarfMat = new THREE.MeshStandardMaterial({
+    color: 0xe11d48,
+    roughness: 0.65,
+    side: THREE.DoubleSide,
+    flatShading: true,
+  });
+  const goldMat = new THREE.MeshStandardMaterial({
+    color: 0xfbbf24,
+    roughness: 0.3,
+    metalness: 0.7,
+    flatShading: true,
+  });
+  const crystalMat = new THREE.MeshStandardMaterial({
+    color: 0x22d3ee,
+    emissive: 0x06b6d4,
+    emissiveIntensity: 1.8,
+    roughness: 0.1,
+    flatShading: true,
+  });
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0x0f172a });
+
+  // 1. BASSIN & TORSE
+  const hipsMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(0.42, 0.18, 0.26),
+    pantsMat
+  );
+  hipsMesh.castShadow = true;
+  hipsMesh.receiveShadow = true;
+  bodyPivot.add(hipsMesh);
+
+  const torsoPivot = new THREE.Group();
+  torsoPivot.position.set(0, 0.08, 0);
+  bodyPivot.add(torsoPivot);
+
+  const chestMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(0.48, 0.56, 0.28),
+    tunicMat
+  );
+  chestMesh.position.set(0, 0.28, 0);
+  chestMesh.castShadow = true;
+  chestMesh.receiveShadow = true;
+  torsoPivot.add(chestMesh);
+
+  const beltMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(0.5, 0.1, 0.3),
+    leatherMat
+  );
+  beltMesh.position.set(0, 0.05, 0);
+  beltMesh.castShadow = true;
+  torsoPivot.add(beltMesh);
+
+  const buckleMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(0.12, 0.11, 0.32),
+    goldMat
+  );
+  buckleMesh.position.set(0, 0.05, 0);
+  torsoPivot.add(buckleMesh);
+
+  const chestGuard = new THREE.Mesh(
+    new THREE.BoxGeometry(0.5, 0.22, 0.3),
+    armorTrimMat
+  );
+  chestGuard.position.set(0, 0.42, 0);
+  chestGuard.castShadow = true;
+  torsoPivot.add(chestGuard);
+
+  const coreGem = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.075, 0),
+    crystalMat
+  );
+  coreGem.position.set(0, 0.42, -0.16);
+  torsoPivot.add(coreGem);
+
+  const neckScarf = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.21, 0.24, 0.14, 8),
+    scarfMat
+  );
+  neckScarf.position.set(0, 0.56, 0);
+  neckScarf.castShadow = true;
+  torsoPivot.add(neckScarf);
+
+  const capePivot = new THREE.Group();
+  capePivot.position.set(0, 0.54, 0.15);
+  torsoPivot.add(capePivot);
+
+  const capeMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(0.46, 0.85, 0.03),
+    scarfMat
+  );
+  capeMesh.position.set(0, -0.42, 0.04);
+  capeMesh.castShadow = true;
+  capePivot.add(capeMesh);
+
+  const backpackGroup = new THREE.Group();
+  backpackGroup.position.set(0, 0.32, 0.21);
+  torsoPivot.add(backpackGroup);
+
+  const packBody = new THREE.Mesh(
+    new THREE.BoxGeometry(0.32, 0.38, 0.16),
+    leatherMat
+  );
+  packBody.castShadow = true;
+  backpackGroup.add(packBody);
+
+  const quiverMesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.065, 0.055, 0.42, 7),
+    leatherMat
+  );
+  quiverMesh.position.set(-0.16, 0.08, 0.02);
+  quiverMesh.rotation.z = -0.22;
+  backpackGroup.add(quiverMesh);
+
+  for (let a = 0; a < 3; a++) {
+    const featherShaft = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.01, 0.01, 0.22, 5),
+      goldMat
+    );
+    featherShaft.position.set(-0.18 + a * 0.025, 0.3, 0.02);
+    featherShaft.rotation.z = -0.22;
+    backpackGroup.add(featherShaft);
+  }
+
+  const lanternCrystal = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.075, 0),
+    crystalMat
+  );
+  lanternCrystal.position.set(0.18, 0.08, 0.06);
+  backpackGroup.add(lanternCrystal);
+
+  // 2. TÊTE HUMANOÏDE
+  const headPivot = new THREE.Group();
+  headPivot.position.set(0, 0.6, 0);
+  torsoPivot.add(headPivot);
+
+  const neckMesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.09, 0.11, 0.12, 8),
+    skinMat
+  );
+  neckMesh.position.set(0, 0.04, 0);
+  headPivot.add(neckMesh);
+
+  const headMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(0.32, 0.34, 0.32),
+    skinMat
+  );
+  headMesh.position.set(0, 0.23, 0);
+  headMesh.castShadow = true;
+  headMesh.receiveShadow = true;
+  headPivot.add(headMesh);
+
+  const leftEye = new THREE.Mesh(
+    new THREE.BoxGeometry(0.045, 0.045, 0.02),
+    eyeMat
+  );
+  leftEye.position.set(-0.075, 0.24, -0.162);
+  headPivot.add(leftEye);
+
+  const rightEye = new THREE.Mesh(
+    new THREE.BoxGeometry(0.045, 0.045, 0.02),
+    eyeMat
+  );
+  rightEye.position.set(0.075, 0.24, -0.162);
+  headPivot.add(rightEye);
+
+  const leftBrow = new THREE.Mesh(
+    new THREE.BoxGeometry(0.065, 0.02, 0.025),
+    hairMat
+  );
+  leftBrow.position.set(-0.075, 0.285, -0.162);
+  headPivot.add(leftBrow);
+
+  const rightBrow = new THREE.Mesh(
+    new THREE.BoxGeometry(0.065, 0.02, 0.025),
+    hairMat
+  );
+  rightBrow.position.set(0.075, 0.285, -0.162);
+  headPivot.add(rightBrow);
+
+  const headband = new THREE.Mesh(
+    new THREE.BoxGeometry(0.34, 0.06, 0.34),
+    scarfMat
+  );
+  headband.position.set(0, 0.33, 0);
+  headPivot.add(headband);
+
+  const hairTop = new THREE.Mesh(
+    new THREE.BoxGeometry(0.35, 0.12, 0.36),
+    hairMat
+  );
+  hairTop.position.set(0, 0.39, 0.01);
+  hairTop.castShadow = true;
+  headPivot.add(hairTop);
+
+  const hairBack = new THREE.Mesh(
+    new THREE.BoxGeometry(0.34, 0.28, 0.12),
+    hairMat
+  );
+  hairBack.position.set(0, 0.25, 0.14);
+  hairBack.castShadow = true;
+  headPivot.add(hairBack);
+
+  const hairSpike = new THREE.Mesh(
+    new THREE.ConeGeometry(0.14, 0.22, 5),
+    hairMat
+  );
+  hairSpike.position.set(0, 0.46, 0.06);
+  hairSpike.rotation.x = -0.35;
+  headPivot.add(hairSpike);
+
+  // 3. BRAS & ATTACHES DIRECTEMENT DANS LA MAIN DROITE
+  function createArm(isLeft: boolean) {
+    const sign = isLeft ? -1 : 1;
+    const armPivot = new THREE.Group();
+    armPivot.position.set(sign * 0.32, 0.5, 0);
+
+    const pauldron = new THREE.Mesh(
+      new THREE.BoxGeometry(0.18, 0.14, 0.2),
+      armorTrimMat
+    );
+    pauldron.position.set(sign * 0.02, 0.02, 0);
+    pauldron.castShadow = true;
+    armPivot.add(pauldron);
+
+    const upperArm = new THREE.Mesh(
+      new THREE.BoxGeometry(0.14, 0.3, 0.14),
+      tunicMat
+    );
+    upperArm.position.set(0, -0.16, 0);
+    upperArm.castShadow = true;
+    armPivot.add(upperArm);
+
+    const forearm = new THREE.Mesh(
+      new THREE.BoxGeometry(0.125, 0.26, 0.125),
+      leatherMat
+    );
+    forearm.position.set(0, -0.42, -0.02);
+    forearm.rotation.x = 0.18;
+    forearm.castShadow = true;
+    armPivot.add(forearm);
+
+    const hand = new THREE.Mesh(
+      new THREE.BoxGeometry(0.11, 0.11, 0.11),
+      skinMat
+    );
+    hand.position.set(0, -0.57, -0.05);
+    hand.castShadow = true;
+    armPivot.add(hand);
+
+    return { armPivot, hand };
+  }
+
+  const leftArm = createArm(true);
+  const rightArm = createArm(false);
+  const leftArmPivot = leftArm.armPivot;
+  const rightArmPivot = rightArm.armPivot;
+  torsoPivot.add(leftArmPivot);
+  torsoPivot.add(rightArmPivot);
+
+  const {
+    swordRoot: swordGroup,
+    slashTrailMesh,
+    setCorruptedMode: setSwordCorrupted,
+  } = buildDetailedSwordMesh();
+  swordGroup.position.set(0, -0.02, -0.03);
+  swordGroup.rotation.x = -Math.PI / 2 + 0.3;
+  rightArm.hand.add(swordGroup);
+
+  const {
+    bowRoot: bowGroup,
+    upperString: tpUpperString,
+    lowerString: tpLowerString,
+    nockedArrow: tpNockedArrow,
+    setCorruptedMode: setBowCorrupted,
+  } = buildDetailedBowMesh();
+  bowGroup.position.set(0, -0.02, -0.04);
+  bowGroup.rotation.x = -Math.PI / 2 + 0.2;
+  rightArm.hand.add(bowGroup);
+
+  // 4. JAMBE GAUCHE & JAMBE DROITE
+  function createLeg(isLeft: boolean) {
+    const sign = isLeft ? -1 : 1;
+    const legPivot = new THREE.Group();
+    legPivot.position.set(sign * 0.13, 0, 0);
+
+    const thigh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.17, 0.44, 0.18),
+      pantsMat
+    );
+    thigh.position.set(0, -0.22, 0);
+    thigh.castShadow = true;
+    thigh.receiveShadow = true;
+    legPivot.add(thigh);
+
+    const boot = new THREE.Mesh(
+      new THREE.BoxGeometry(0.16, 0.44, 0.17),
+      leatherMat
+    );
+    boot.position.set(0, -0.64, 0);
+    boot.castShadow = true;
+    boot.receiveShadow = true;
+    legPivot.add(boot);
+
+    const foot = new THREE.Mesh(
+      new THREE.BoxGeometry(0.165, 0.1, 0.24),
+      leatherMat
+    );
+    foot.position.set(0, -0.85, -0.035);
+    foot.castShadow = true;
+    legPivot.add(foot);
+
+    return legPivot;
+  }
+
+  const leftLegPivot = createLeg(true);
+  const rightLegPivot = createLeg(false);
+  bodyPivot.add(leftLegPivot);
+  bodyPivot.add(rightLegPivot);
+
+  // 5. ANIMATION 3ÈME PERSONNE
+  let walkCycle = 0;
+
+  const updateAnimation = ({
+    dt,
+    time,
+    speed,
+    forwardInput,
+    rightInput,
+    isSprinting,
+    isGrounded,
+    isSwimming,
+    headPitch,
+    equippedWeapon,
+    attackProgress,
+    bowDrawProgress,
+    bowReleaseTimer,
+    hasArrows,
+    isSeatedOnThrone = false,
+    isCorrupted = false,
+  }: {
+    dt: number;
+    time: number;
+    speed: number;
+    forwardInput: number;
+    rightInput: number;
+    isSprinting: boolean;
+    isGrounded: boolean;
+    isSwimming: boolean;
+    headPitch: number;
+    equippedWeapon: WeaponType;
+    attackProgress: number;
+    bowDrawProgress: number;
+    bowReleaseTimer: number;
+    hasArrows: boolean;
+    isSeatedOnThrone?: boolean;
+    isCorrupted?: boolean;
+  }) => {
+    const tSec = time * 0.001;
+
+    setSwordCorrupted(isCorrupted);
+    setBowCorrupted(isCorrupted);
+    if (isCorrupted) {
+      tunicMat.color.setHex(0x181028);
+      armorTrimMat.color.setHex(0xe11d48);
+      crystalMat.color.setHex(0xf43f5e);
+      crystalMat.emissive.setHex(0xe11d48);
+    } else {
+      tunicMat.color.setHex(0x0f4c81);
+      armorTrimMat.color.setHex(0x38bdf8);
+      crystalMat.color.setHex(0x22d3ee);
+      crystalMat.emissive.setHex(0x06b6d4);
+    }
+
+    // --- POSTURE ROYALE SUR LE TRÔNE (FIN DE DOMINATION : CONTRÔLER LE MONDE) ---
+    if (isSeatedOnThrone) {
+      swordGroup.visible = true;
+      bowGroup.visible = false;
+      (slashTrailMesh.material as THREE.MeshBasicMaterial).opacity = 0;
+
+      bodyPivot.position.y = THREE.MathUtils.lerp(bodyPivot.position.y, 0.58, Math.min(1, dt * 8));
+      bodyPivot.rotation.x = THREE.MathUtils.lerp(bodyPivot.rotation.x, 0.06, Math.min(1, dt * 8));
+      bodyPivot.rotation.y = THREE.MathUtils.lerp(bodyPivot.rotation.y, 0, Math.min(1, dt * 8));
+
+      leftLegPivot.rotation.x = THREE.MathUtils.lerp(leftLegPivot.rotation.x, 1.35, Math.min(1, dt * 8));
+      rightLegPivot.rotation.x = THREE.MathUtils.lerp(rightLegPivot.rotation.x, 1.35, Math.min(1, dt * 8));
+
+      leftArmPivot.rotation.x = THREE.MathUtils.lerp(leftArmPivot.rotation.x, 0.65, Math.min(1, dt * 8));
+      leftArmPivot.rotation.z = THREE.MathUtils.lerp(leftArmPivot.rotation.z, -0.32, Math.min(1, dt * 8));
+
+      rightArmPivot.rotation.x = THREE.MathUtils.lerp(rightArmPivot.rotation.x, 0.55, Math.min(1, dt * 8));
+      rightArmPivot.rotation.z = THREE.MathUtils.lerp(rightArmPivot.rotation.z, 0.28, Math.min(1, dt * 8));
+
+      headPivot.rotation.x = THREE.MathUtils.lerp(
+        headPivot.rotation.x,
+        -0.08 + Math.sin(tSec * 1.5) * 0.04,
+        Math.min(1, dt * 8)
+      );
+      capePivot.rotation.x = 0.05;
+      return;
+    }
+
+    swordGroup.visible = equippedWeapon === 'SWORD' && !isSwimming;
+    bowGroup.visible = equippedWeapon === 'BOW' && !isSwimming;
+
+    (slashTrailMesh.material as THREE.MeshBasicMaterial).opacity =
+      equippedWeapon === 'SWORD' && attackProgress > 0.1 && attackProgress < 0.8
+        ? Math.sin(attackProgress * Math.PI) * 0.8
+        : 0;
+
+    headPivot.rotation.x = THREE.MathUtils.lerp(
+      headPivot.rotation.x,
+      Math.max(-0.5, Math.min(0.5, headPitch * 0.6)),
+      Math.min(1, dt * 12)
+    );
+
+    if (isSwimming) {
+      walkCycle += dt * (4.5 + speed * 0.35);
+
+      const targetBodyPitch = speed > 0.8 ? -1.05 : -0.35;
+      bodyPivot.rotation.x = THREE.MathUtils.lerp(
+        bodyPivot.rotation.x,
+        targetBodyPitch,
+        Math.min(1, dt * 6)
+      );
+      bodyPivot.rotation.y = THREE.MathUtils.lerp(
+        bodyPivot.rotation.y,
+        0,
+        Math.min(1, dt * 8)
+      );
+      bodyPivot.position.y = THREE.MathUtils.lerp(
+        bodyPivot.position.y,
+        0.85 + Math.sin(tSec * 2.5) * 0.05,
+        Math.min(1, dt * 6)
+      );
+
+      leftLegPivot.rotation.x = Math.sin(walkCycle * 1.4) * 0.45;
+      rightLegPivot.rotation.x = -Math.sin(walkCycle * 1.4) * 0.45;
+
+      leftArmPivot.rotation.x = Math.cos(walkCycle) * 1.25 - 0.5;
+      rightArmPivot.rotation.x = -Math.cos(walkCycle) * 1.25 - 0.5;
+      leftArmPivot.rotation.z = -0.25;
+      rightArmPivot.rotation.z = 0.25;
+
+      capePivot.rotation.x = 0.35 + Math.sin(walkCycle * 1.5) * 0.2;
+      return;
+    }
+
+    const isBackingUp = forwardInput < 0;
+    const walkDirectionSign = isBackingUp ? -1 : 1;
+
+    let targetHipYaw = 0;
+    if (forwardInput > 0 && rightInput !== 0) {
+      targetHipYaw = -rightInput * 0.35;
+    } else if (forwardInput < 0 && rightInput !== 0) {
+      targetHipYaw = rightInput * 0.35;
+    } else if (forwardInput === 0 && rightInput !== 0) {
+      targetHipYaw = -rightInput * 0.45;
+    }
+
+    bodyPivot.rotation.y = THREE.MathUtils.lerp(
+      bodyPivot.rotation.y,
+      targetHipYaw,
+      Math.min(1, dt * 10)
+    );
+
+    if (!isGrounded) {
+      bodyPivot.rotation.x = THREE.MathUtils.lerp(
+        bodyPivot.rotation.x,
+        isBackingUp ? 0.06 : -0.1,
+        Math.min(1, dt * 8)
+      );
+      bodyPivot.position.y = THREE.MathUtils.lerp(
+        bodyPivot.position.y,
+        0.92,
+        Math.min(1, dt * 10)
+      );
+
+      leftArmPivot.rotation.x = THREE.MathUtils.lerp(
+        leftArmPivot.rotation.x,
+        -0.45,
+        Math.min(1, dt * 10)
+      );
+      if (attackProgress <= 0 && bowDrawProgress <= 0) {
+        rightArmPivot.rotation.x = THREE.MathUtils.lerp(
+          rightArmPivot.rotation.x,
+          0.22,
+          Math.min(1, dt * 12)
+        );
+      }
+
+      leftLegPivot.rotation.x = THREE.MathUtils.lerp(
+        leftLegPivot.rotation.x,
+        0.45 * walkDirectionSign,
+        Math.min(1, dt * 10)
+      );
+      rightLegPivot.rotation.x = THREE.MathUtils.lerp(
+        rightLegPivot.rotation.x,
+        -0.35 * walkDirectionSign,
+        Math.min(1, dt * 10)
+      );
+
+      capePivot.rotation.x = THREE.MathUtils.lerp(
+        capePivot.rotation.x,
+        0.55,
+        Math.min(1, dt * 8)
+      );
+    } else {
+      const isMoving = speed > 0.6;
+      if (isMoving) {
+        const freq = isSprinting ? 1.05 : 0.88;
+        walkCycle += dt * speed * freq * walkDirectionSign;
+
+        const strideScale = isBackingUp ? 0.72 : 1.0;
+        const strideAmp =
+          Math.min(0.82, speed * (isSprinting ? 0.048 : 0.042)) * strideScale;
+        const leftArmAmp =
+          Math.min(0.75, speed * (isSprinting ? 0.045 : 0.038)) * strideScale;
+
+        leftLegPivot.rotation.x = Math.sin(walkCycle) * strideAmp;
+        rightLegPivot.rotation.x = -Math.sin(walkCycle) * strideAmp;
+
+        leftArmPivot.rotation.x = -Math.sin(walkCycle) * leftArmAmp;
+        rightArmPivot.rotation.x = THREE.MathUtils.lerp(
+          rightArmPivot.rotation.x,
+          isSprinting ? 0.12 : 0.22,
+          Math.min(1, dt * 14)
+        );
+
+        leftArmPivot.rotation.z = THREE.MathUtils.lerp(
+          leftArmPivot.rotation.z,
+          -0.08,
+          Math.min(1, dt * 10)
+        );
+        rightArmPivot.rotation.z = THREE.MathUtils.lerp(
+          rightArmPivot.rotation.z,
+          0.08,
+          Math.min(1, dt * 10)
+        );
+
+        torsoPivot.rotation.y = THREE.MathUtils.lerp(
+          torsoPivot.rotation.y,
+          0,
+          Math.min(1, dt * 10)
+        );
+
+        const targetLean = isBackingUp
+          ? 0.04
+          : isSprinting
+          ? -0.15
+          : -0.04;
+        bodyPivot.rotation.x = THREE.MathUtils.lerp(
+          bodyPivot.rotation.x,
+          targetLean,
+          Math.min(1, dt * 10)
+        );
+
+        bodyPivot.position.y = THREE.MathUtils.lerp(
+          bodyPivot.position.y,
+          0.9,
+          Math.min(1, dt * 10)
+        );
+
+        const targetCapeAngle = isBackingUp
+          ? 0.12
+          : Math.min(0.78, 0.15 + speed * 0.035);
+        capePivot.rotation.x = THREE.MathUtils.lerp(
+          capePivot.rotation.x,
+          targetCapeAngle,
+          Math.min(1, dt * 8)
+        );
+      } else {
+        bodyPivot.rotation.x = THREE.MathUtils.lerp(
+          bodyPivot.rotation.x,
+          0,
+          Math.min(1, dt * 10)
+        );
+        bodyPivot.position.y = THREE.MathUtils.lerp(
+          bodyPivot.position.y,
+          0.9,
+          Math.min(1, dt * 10)
+        );
+        torsoPivot.rotation.y = THREE.MathUtils.lerp(
+          torsoPivot.rotation.y,
+          0,
+          Math.min(1, dt * 10)
+        );
+
+        leftLegPivot.rotation.x = THREE.MathUtils.lerp(
+          leftLegPivot.rotation.x,
+          0,
+          Math.min(1, dt * 12)
+        );
+        rightLegPivot.rotation.x = THREE.MathUtils.lerp(
+          rightLegPivot.rotation.x,
+          0,
+          Math.min(1, dt * 12)
+        );
+
+        leftArmPivot.rotation.x = THREE.MathUtils.lerp(
+          leftArmPivot.rotation.x,
+          0,
+          Math.min(1, dt * 10)
+        );
+        rightArmPivot.rotation.x = THREE.MathUtils.lerp(
+          rightArmPivot.rotation.x,
+          0.2,
+          Math.min(1, dt * 10)
+        );
+        leftArmPivot.rotation.z = THREE.MathUtils.lerp(
+          leftArmPivot.rotation.z,
+          -0.06,
+          Math.min(1, dt * 10)
+        );
+        rightArmPivot.rotation.z = THREE.MathUtils.lerp(
+          rightArmPivot.rotation.z,
+          0.08,
+          Math.min(1, dt * 10)
+        );
+
+        capePivot.rotation.x = THREE.MathUtils.lerp(
+          capePivot.rotation.x,
+          0.08,
+          Math.min(1, dt * 8)
+        );
+      }
+    }
+
+    // --- SURCOUCHE D'ANIMATION DE COMBAT 3ÈME PERSONNE ---
+    if (equippedWeapon === 'SWORD' && attackProgress > 0) {
+      const swingCurve = Math.sin(attackProgress * Math.PI);
+      const slashRotX =
+        attackProgress < 0.28
+          ? 0.2 + (attackProgress / 0.28) * 1.35
+          : 1.55 - ((attackProgress - 0.28) / 0.72) * 2.45;
+
+      rightArmPivot.rotation.x = slashRotX;
+      rightArmPivot.rotation.z = -0.35 * swingCurve;
+      torsoPivot.rotation.y = swingCurve * 0.42;
+    } else if (equippedWeapon === 'BOW') {
+      const isDrawingOrReleasing = bowDrawProgress > 0.01 || bowReleaseTimer > 0;
+      const pullBackZ = bowDrawProgress * 0.24;
+
+      if (isDrawingOrReleasing) {
+        rightArmPivot.rotation.x = Math.PI / 2 - 0.18 + headPitch * 0.75;
+        rightArmPivot.rotation.z = 0.05;
+        bowGroup.rotation.x = -Math.PI / 2 + 0.15;
+
+        leftArmPivot.rotation.x =
+          (Math.PI / 2 - 0.2) * (0.35 + bowDrawProgress * 0.65) +
+          headPitch * 0.5;
+        leftArmPivot.rotation.z = 0.22;
+        torsoPivot.rotation.y = 0.28 * bowDrawProgress;
+
+        tpNockedArrow.visible = (hasArrows || isCorrupted) && bowReleaseTimer <= 0;
+        tpNockedArrow.position.set(0, 0, pullBackZ);
+        tpUpperString.position.set(0, 0.22, 0.18 + pullBackZ * 0.5);
+        tpUpperString.rotation.x = -pullBackZ * 1.85;
+        tpLowerString.position.set(0, -0.22, 0.18 + pullBackZ * 0.5);
+        tpLowerString.rotation.x = pullBackZ * 1.85;
+      } else {
+        bowGroup.rotation.x = -Math.PI / 2 + 0.2;
+        tpNockedArrow.visible = hasArrows || isCorrupted;
+        tpNockedArrow.position.set(0, 0, 0);
+        tpUpperString.position.set(0, 0.22, 0.18);
+        tpUpperString.rotation.x = 0;
+        tpLowerString.position.set(0, -0.22, 0.18);
+        tpLowerString.rotation.x = 0;
+      }
+    }
+  };
+
+  return {
+    group: rootGroup,
+    bowObject: bowGroup,
+    updateAnimation,
+  };
+}
+
+/**
+ * Construit le Viewmodel 1ère personne
+ */
+export function createFirstPersonViewModel(): FirstPersonViewModel {
+  const fpRoot = new THREE.Group();
+
+  const skinMat = new THREE.MeshStandardMaterial({
+    color: 0xf4c29f,
+    roughness: 0.65,
+    flatShading: true,
+  });
+  const leatherMat = new THREE.MeshStandardMaterial({
+    color: 0x4a2e1b,
+    roughness: 0.75,
+    flatShading: true,
+  });
+  const sleeveMat = new THREE.MeshStandardMaterial({
+    color: 0x0f4c81,
+    roughness: 0.6,
+    flatShading: true,
+  });
+
+  // 1. GROUPE ÉPÉE 1ÈRE PERSONNE
+  const fpSwordHolder = new THREE.Group();
+  fpSwordHolder.position.set(0.38, -0.34, -0.52);
+  fpRoot.add(fpSwordHolder);
+
+  const rightForearm = new THREE.Mesh(
+    new THREE.BoxGeometry(0.09, 0.28, 0.09),
+    leatherMat
+  );
+  rightForearm.position.set(0.02, -0.14, 0.14);
+  rightForearm.rotation.x = Math.PI / 3;
+  fpSwordHolder.add(rightForearm);
+
+  const rightSleeve = new THREE.Mesh(
+    new THREE.BoxGeometry(0.105, 0.18, 0.105),
+    sleeveMat
+  );
+  rightSleeve.position.set(0.02, -0.22, 0.24);
+  rightSleeve.rotation.x = Math.PI / 3;
+  fpSwordHolder.add(rightSleeve);
+
+  const rightHand = new THREE.Mesh(
+    new THREE.BoxGeometry(0.085, 0.085, 0.085),
+    skinMat
+  );
+  fpSwordHolder.add(rightHand);
+
+  const {
+    swordRoot: fpSword,
+    slashTrailMesh: fpSlashTrail,
+    setCorruptedMode: setFpSwordCorrupted,
+  } = buildDetailedSwordMesh();
+  fpSword.scale.set(0.78, 0.78, 0.78);
+  fpSword.rotation.set(-0.35, -0.25, 0.12);
+  fpSwordHolder.add(fpSword);
+
+  // 2. GROUPE ARC / CATALYSEUR D'ÉCLAIRS 1ÈRE PERSONNE
+  const fpBowHolder = new THREE.Group();
+  fpBowHolder.position.set(0.34, -0.24, -0.54);
+  fpRoot.add(fpBowHolder);
+
+  const bowRightForearm = new THREE.Mesh(
+    new THREE.BoxGeometry(0.085, 0.26, 0.085),
+    leatherMat
+  );
+  bowRightForearm.position.set(0.02, -0.1, 0.16);
+  bowRightForearm.rotation.x = Math.PI / 2.4;
+  fpBowHolder.add(bowRightForearm);
+
+  const bowRightHand = new THREE.Mesh(
+    new THREE.BoxGeometry(0.08, 0.08, 0.08),
+    skinMat
+  );
+  fpBowHolder.add(bowRightHand);
+
+  const {
+    bowRoot: fpBow,
+    upperString: fpUpperString,
+    lowerString: fpLowerString,
+    nockedArrow: fpNockedArrow,
+    setCorruptedMode: setFpBowCorrupted,
+  } = buildDetailedBowMesh();
+  fpBow.scale.set(0.85, 0.85, 0.85);
+  fpBowHolder.add(fpBow);
+
+  const drawHandGroup = new THREE.Group();
+  const drawHandMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(0.075, 0.075, 0.075),
+    skinMat
+  );
+  drawHandGroup.add(drawHandMesh);
+  fpBow.add(drawHandGroup);
+
+  const updateAnimation = ({
+    dt,
+    isSprinting,
+    isSwimming,
+    equippedWeapon,
+    attackProgress,
+    bowDrawProgress,
+    bowReleaseTimer,
+    hasArrows,
+    isCorrupted = false,
+  }: {
+    dt: number;
+    time: number;
+    speed: number;
+    isSprinting: boolean;
+    isGrounded: boolean;
+    isSwimming: boolean;
+    equippedWeapon: WeaponType;
+    attackProgress: number;
+    bowDrawProgress: number;
+    bowReleaseTimer: number;
+    hasArrows: boolean;
+    isCorrupted?: boolean;
+  }) => {
+    setFpSwordCorrupted(isCorrupted);
+    setFpBowCorrupted(isCorrupted);
+
+    if (isSwimming) {
+      fpSwordHolder.visible = false;
+      fpBowHolder.visible = false;
+      return;
+    }
+
+    fpSwordHolder.visible = equippedWeapon === 'SWORD';
+    fpBowHolder.visible = equippedWeapon === 'BOW';
+
+    if (equippedWeapon === 'SWORD') {
+      if (attackProgress > 0) {
+        let rotX = -0.35;
+        let rotY = -0.25;
+        let rotZ = 0.12;
+        let posX = 0.38;
+        let posY = -0.34;
+        let posZ = -0.52;
+
+        if (attackProgress < 0.25) {
+          const p = attackProgress / 0.25;
+          const ease = p * (2 - p);
+          posX = THREE.MathUtils.lerp(0.38, 0.46, ease);
+          posY = THREE.MathUtils.lerp(-0.34, -0.16, ease);
+          posZ = THREE.MathUtils.lerp(-0.52, -0.44, ease);
+          rotX = THREE.MathUtils.lerp(-0.35, 0.35, ease);
+          rotY = THREE.MathUtils.lerp(-0.25, -0.55, ease);
+          rotZ = THREE.MathUtils.lerp(0.12, -0.4, ease);
+        } else if (attackProgress < 0.68) {
+          const p = (attackProgress - 0.25) / 0.43;
+          const ease = p * p * (3 - 2 * p);
+          posX = THREE.MathUtils.lerp(0.46, -0.26, ease);
+          posY = THREE.MathUtils.lerp(-0.16, -0.42, ease);
+          posZ = THREE.MathUtils.lerp(-0.44, -0.66, ease);
+          rotX = THREE.MathUtils.lerp(0.35, -1.35, ease);
+          rotY = THREE.MathUtils.lerp(-0.55, 0.65, ease);
+          rotZ = THREE.MathUtils.lerp(-0.4, 1.15, ease);
+        } else {
+          const p = (attackProgress - 0.68) / 0.32;
+          const ease = p * (2 - p);
+          posX = THREE.MathUtils.lerp(-0.26, 0.38, ease);
+          posY = THREE.MathUtils.lerp(-0.42, -0.34, ease);
+          posZ = THREE.MathUtils.lerp(-0.66, -0.52, ease);
+          rotX = THREE.MathUtils.lerp(-1.35, -0.35, ease);
+          rotY = THREE.MathUtils.lerp(0.65, -0.25, ease);
+          rotZ = THREE.MathUtils.lerp(1.15, 0.12, ease);
+        }
+
+        fpSwordHolder.position.set(posX, posY, posZ);
+        fpSword.rotation.set(rotX, rotY, rotZ);
+        (fpSlashTrail.material as THREE.MeshBasicMaterial).opacity =
+          attackProgress > 0.2 && attackProgress < 0.72
+            ? Math.sin(((attackProgress - 0.2) / 0.52) * Math.PI) * 0.85
+            : 0;
+      } else {
+        const sprintTilt = isSprinting ? -0.18 : 0;
+        fpSwordHolder.position.set(0.38, -0.34, -0.52);
+        fpSword.rotation.x = THREE.MathUtils.lerp(
+          fpSword.rotation.x,
+          -0.35 + sprintTilt,
+          Math.min(1, dt * 12)
+        );
+        fpSword.rotation.y = -0.25;
+        fpSword.rotation.z = 0.12;
+        (fpSlashTrail.material as THREE.MeshBasicMaterial).opacity = 0;
+      }
+    }
+
+    if (equippedWeapon === 'BOW') {
+      const isDrawingOrReleasing = bowDrawProgress > 0.01 || bowReleaseTimer > 0;
+
+      if (isDrawingOrReleasing) {
+        const pullBackZ = bowDrawProgress * 0.26;
+        const recoilKick = bowReleaseTimer > 0 ? Math.sin((bowReleaseTimer / 0.18) * Math.PI) * 0.06 : 0;
+
+        fpBowHolder.position.set(
+          THREE.MathUtils.lerp(0.34, 0.1, bowDrawProgress),
+          THREE.MathUtils.lerp(-0.24, -0.14, bowDrawProgress) + recoilKick * 0.5,
+          THREE.MathUtils.lerp(-0.54, -0.45, bowDrawProgress) + recoilKick
+        );
+        fpBow.rotation.set(
+          0.02 - recoilKick * 1.2,
+          -0.12 * (1 - bowDrawProgress),
+          0.08 * (1 - bowDrawProgress)
+        );
+
+        fpNockedArrow.visible = (hasArrows || isCorrupted) && bowReleaseTimer <= 0;
+        fpNockedArrow.position.set(0, 0, pullBackZ);
+
+        drawHandGroup.visible = bowReleaseTimer <= 0;
+        drawHandGroup.position.set(-0.04, 0, 0.18 + pullBackZ);
+
+        fpUpperString.position.set(0, 0.22, 0.18 + pullBackZ * 0.5);
+        fpUpperString.rotation.x = -pullBackZ * 1.85;
+
+        fpLowerString.position.set(0, -0.22, 0.18 + pullBackZ * 0.5);
+        fpLowerString.rotation.x = pullBackZ * 1.85;
+      } else {
+        fpBowHolder.position.set(0.34, -0.24, -0.54);
+        fpBow.rotation.x = THREE.MathUtils.lerp(
+          fpBow.rotation.x,
+          0.08 + (isSprinting ? -0.16 : 0),
+          Math.min(1, dt * 12)
+        );
+        fpBow.rotation.y = -0.22;
+        fpBow.rotation.z = 0.18;
+
+        fpNockedArrow.visible = hasArrows || isCorrupted;
+        fpNockedArrow.position.set(0, 0, 0);
+        drawHandGroup.visible = false;
+
+        fpUpperString.position.set(0, 0.22, 0.18);
+        fpUpperString.rotation.x = 0;
+        fpLowerString.position.set(0, -0.22, 0.18);
+        fpLowerString.rotation.x = 0;
+      }
+    }
+  };
+
+  return {
+    group: fpRoot,
+    bowObject: fpBow,
+    updateAnimation,
+  };
+}
