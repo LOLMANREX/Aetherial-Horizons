@@ -1,0 +1,21 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow access to user save slots (supports both Firebase Auth UID and local profile IDs)
+    match /users/{uid}/saves/{slotId} {
+      allow read: if uid.size() > 0;
+      allow create, update: if uid.size() > 0
+        && (request.auth == null || request.auth.uid == uid)
+        && request.resource.data.keys().hasAll(['slotId', 'updatedAt', 'orbsCollected', 'totalOrbs', 'playerPos', 'orbs'])
+        && request.resource.data.slotId is int
+        && request.resource.data.slotId >= 1
+        && request.resource.data.slotId <= 3;
+      allow delete: if uid.size() > 0
+        && (request.auth == null || request.auth.uid == uid);
+    }
+
+    match /users/{uid}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}
