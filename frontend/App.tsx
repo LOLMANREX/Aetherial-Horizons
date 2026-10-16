@@ -399,11 +399,13 @@ export function App() {
   const applyEnemyPowerScaling = useCallback((orbsCount: number) => {
     const st = gameRef.current;
     const isSurvivor = st.endingChoice === 'RULE_WORLD';
-    const scaleVisual = isSurvivor ? 1.12 : 1 + orbsCount * 0.055;
-    const newMaxHp = 100 + orbsCount * 28;
+    const isDemon = st.endingChoice === 'SAVE_WORLD';
+    const scaleVisual = isSurvivor ? 1.12 : isDemon ? 1.32 : 1 + orbsCount * 0.055;
+    const newMaxHp = isDemon ? 450 : 100 + orbsCount * 28;
 
     st.enemyInstances.forEach((enemy) => {
       enemy.setHumanSurvivorMode(isSurvivor);
+      enemy.setSpacetimeDemonMode(isDemon);
       const ratio = enemy.hp / Math.max(1, enemy.maxHp);
       enemy.maxHp = newMaxHp;
       enemy.hp = Math.round(ratio * newMaxHp);
@@ -426,10 +428,12 @@ export function App() {
     const st = gameRef.current;
     const orbsCount = st.orbs.filter((o) => o.collected).length;
     const isSurvivor = st.endingChoice === 'RULE_WORLD';
+    const isDemon = st.endingChoice === 'SAVE_WORLD';
     applyEnemyPowerScaling(orbsCount);
 
     st.enemyInstances.forEach((enemy) => {
       enemy.setHumanSurvivorMode(isSurvivor);
+      enemy.setSpacetimeDemonMode(isDemon);
       enemy.hp = enemy.maxHp;
       enemy.alive = true;
       enemy.position.copy(enemy.homePos);
@@ -569,6 +573,7 @@ export function App() {
 
         st.enemyInstances.forEach((enemy, idx) => {
           enemy.setHumanSurvivorMode(false);
+          enemy.setSpacetimeDemonMode(true);
           if (idx < 12) {
             const angle = (idx / 12) * Math.PI * 2;
             const radius = 14 + (idx % 2) * 5;
@@ -2349,9 +2354,12 @@ export function App() {
         scene.add(dropLoot.group);
         gameRef.current.lootInstances.push(dropLoot);
         const isRuler = gameRef.current.endingChoice === 'RULE_WORLD';
+        const isCelestial = gameRef.current.endingChoice === 'SAVE_WORLD';
         showToast(
           isRuler
             ? 'Survivant Humain éliminé !'
+            : isCelestial
+            ? 'Démon de l’Espace-Temps banni dans le Néant !'
             : 'Maraudeur vaincu ! Flèches lâchées au sol.'
         );
       } else {
@@ -3635,16 +3643,18 @@ export function App() {
           }
         }
 
-        // --- IA DES MARAUDEURS OU SURVIVANTS HUMAINS VENGEURS ---
-        const aggroRadius = 34 + orbsCollectedCount * 3.0;
-        const enemyChaseSpeed = 6.6 + orbsCollectedCount * 0.42;
-        const enemyAttackDamage = 12 + orbsCollectedCount * 2.5;
-        const enemyAttackInterval = Math.max(0.75, 1.45 - orbsCollectedCount * 0.06);
+        const aggroRadius = isTranscendentSavior ? 75 : 34 + orbsCollectedCount * 3.0;
+        const enemyChaseSpeed = isTranscendentSavior ? 12.8 : 6.6 + orbsCollectedCount * 0.42;
+        const enemyAttackDamage = isTranscendentSavior ? 42 : 12 + orbsCollectedCount * 2.5;
+        const enemyAttackInterval = isTranscendentSavior
+          ? 0.65
+          : Math.max(0.75, 1.45 - orbsCollectedCount * 0.06);
 
         state.enemyInstances.forEach((enemy) => {
           if (!enemy.alive) return;
 
           enemy.setHumanSurvivorMode(isCorruptedRuler);
+          enemy.setSpacetimeDemonMode(isTranscendentSavior, now * 0.001);
 
           const dxToPlayer = state.playerPos.x - enemy.position.x;
           const dzToPlayer = state.playerPos.z - enemy.position.z;
@@ -3661,6 +3671,9 @@ export function App() {
           if (enemy.hurtFlashTimer > 0) {
             enemy.hurtFlashTimer = Math.max(0, enemy.hurtFlashTimer - dt);
           }
+          if (enemy.warpCooldown > 0) {
+            enemy.warpCooldown = Math.max(0, enemy.warpCooldown - dt);
+          }
 
           let moveTargetX = 0;
           let moveTargetZ = 0;
@@ -3671,15 +3684,85 @@ export function App() {
             const dirZ = dzToPlayer / Math.max(0.001, distToPlayer);
             enemy.yaw = Math.atan2(-dirX, -dirZ);
 
-            if (distToPlayer > 2.3) {
+            if (
+              isTranscendentSavior &&
+              distToPlayer > 5.5 &&
+              distToPlayer < 36.0 &&
+              enemy.warpCooldown <= 0
+            ) {
+              enemy.warpCooldown = 2.6 + Math.random() * 1.6;
+              const flankAngle = Math.atan2(dzToPlayer, dxToPlayer) + (Math.random() - 0.5) * 1.4;
+              const warpDist = Math.max(2.6, distToPlayer * 0.42);
+              const wx = state.playerPos.x - Math.cos(flankAngle) * warpDist;
+              const wz = state.playerPos.z - Math.sin(flankAngle) * warpDist;
+              const wy = getTerrainHeight(wx, wz);
+
+              const warpRing = new THREE.Mesh(
+                new THREE.RingGeometry(0.4, 2.2, 20),
+                new THREE.MeshBasicMaterial({
+                  color: 0xa855f7,
+                  transparent: true,
+                  opacity: 0.9,
+                  side: THREE.DoubleSide,
+                  blending: THREE.AdditiveBlending,
+                  depthWrite: false,
+                })
+              );
+              warpRing.rotation.x = -Math.PI / 2;
+              warpRing.position.set(wx, wy + 0.35, wz);
+              scene.add(warpRing);
+              state.visualEffects.push({
+                mesh: warpRing,
+                age: 0,
+                maxAge: 0.45,
+                type: 'NOVA_RING',
+              });
+
+              enemy.position.set(wx, wy, wz);
+              enemy.group.position.copy(enemy.position);
+            }
+
+            if (distToPlayer > (isTranscendentSavior ? 2.9 : 2.3)) {
               moveTargetX = dirX;
               moveTargetZ = dirZ;
               moveSpeed = enemyChaseSpeed;
             } else if (enemy.attackCooldown <= 0) {
               enemy.attackCooldown = enemyAttackInterval;
               enemy.attackAnimTimer = 0.4;
+
+              if (isTranscendentSavior) {
+                const anomalyBurst = new THREE.Mesh(
+                  new THREE.RingGeometry(0.5, 2.4, 24),
+                  new THREE.MeshBasicMaterial({
+                    color: 0xd946ef,
+                    transparent: true,
+                    opacity: 0.85,
+                    side: THREE.DoubleSide,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false,
+                  })
+                );
+                anomalyBurst.rotation.x = -Math.PI / 2;
+                anomalyBurst.position.set(
+                  enemy.position.x,
+                  enemy.position.y + 0.5,
+                  enemy.position.z
+                );
+                scene.add(anomalyBurst);
+                state.visualEffects.push({
+                  mesh: anomalyBurst,
+                  age: 0,
+                  maxAge: 0.38,
+                  type: 'NOVA_RING',
+                });
+              }
+
               if (state.divineInvulnTimer <= 0) {
                 state.health = Math.max(0, state.health - enemyAttackDamage);
+                if (isTranscendentSavior) {
+                  state.playerVel.x += dirX * 9.5;
+                  state.playerVel.z += dirZ * 9.5;
+                }
                 soundFX.playPlayerHurt();
               }
 

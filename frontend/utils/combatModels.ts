@@ -23,7 +23,10 @@ export interface EnemyInstance3D {
   attackAnimTimer: number;
   hurtFlashTimer: number;
   walkPhase: number;
+  warpCooldown: number;
+  spacetimeAnomalyGroup: THREE.Group;
   setHumanSurvivorMode: (isSurvivor: boolean) => void;
+  setSpacetimeDemonMode: (isDemon: boolean, timeSec?: number) => void;
 }
 
 export interface BossInstance3D {
@@ -63,6 +66,7 @@ export interface ArrowProjectile3D {
   age: number;
   active: boolean;
   isLightningBolt?: boolean;
+  isCosmicArrow?: boolean;
 }
 
 export interface LootPickup3D {
@@ -739,29 +743,146 @@ export function createEnemyMesh(
 
   group.add(hpBarGroup);
 
-  // Permet de transformer les Maraudeurs en Survivants Humains Résistants lorsque le joueur a choisi la mauvaise fin !
+  const spacetimeAnomalyGroup = new THREE.Group();
+  spacetimeAnomalyGroup.position.set(0, 0.45, 0);
+  spacetimeAnomalyGroup.visible = false;
+
+  const anomalyRingMat = new THREE.MeshBasicMaterial({
+    color: 0xa855f7,
+    transparent: true,
+    opacity: 0.85,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+
+  const anomalyVoidMat = new THREE.MeshBasicMaterial({
+    color: 0x1e0538,
+    transparent: true,
+    opacity: 0.78,
+  });
+
+  const riftRing1 = new THREE.Mesh(
+    new THREE.TorusGeometry(0.62, 0.028, 6, 20),
+    anomalyRingMat
+  );
+  riftRing1.rotation.x = Math.PI / 3;
+  spacetimeAnomalyGroup.add(riftRing1);
+
+  const riftRing2 = new THREE.Mesh(
+    new THREE.TorusGeometry(0.76, 0.02, 6, 20),
+    anomalyRingMat
+  );
+  riftRing2.rotation.y = Math.PI / 3;
+  spacetimeAnomalyGroup.add(riftRing2);
+
+  for (let s = 0; s < 5; s++) {
+    const a = (s / 5) * Math.PI * 2;
+    const shard = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.11, 0),
+      s % 2 === 0 ? anomalyRingMat : anomalyVoidMat
+    );
+    shard.position.set(Math.cos(a) * 0.68, (s - 2) * 0.16, Math.sin(a) * 0.68);
+    shard.scale.set(0.5, 1.8, 0.5);
+    spacetimeAnomalyGroup.add(shard);
+  }
+  bodyPivot.add(spacetimeAnomalyGroup);
+
+  const distortionUniforms = {
+    uTime: { value: 0 },
+    uDistortStrength: { value: 0 },
+  };
+
+  [darkArmorMat, headSkinOrHelmMat, crimsonTrimMat].forEach((mat) => {
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uTime = distortionUniforms.uTime;
+      shader.uniforms.uDistortStrength = distortionUniforms.uDistortStrength;
+      shader.vertexShader =
+        `uniform float uTime;\nuniform float uDistortStrength;\n` +
+        shader.vertexShader.replace(
+          '#include <begin_vertex>',
+          `#include <begin_vertex>
+          if (uDistortStrength > 0.01) {
+            float glitchWave = sin(position.y * 14.0 + uTime * 9.0) * cos(position.x * 10.0 - uTime * 7.0);
+            transformed.x += glitchWave * 0.045 * uDistortStrength;
+            transformed.z += cos(position.y * 12.0 + uTime * 11.0) * 0.035 * uDistortStrength;
+          }`
+        );
+    };
+  });
+
   let currentSurvivorMode = false;
+  let currentDemonMode = false;
+
+  const applyModeColors = () => {
+    hornL.visible = !currentSurvivorMode;
+    hornR.visible = !currentSurvivorMode;
+    survivorHairGroup.visible = currentSurvivorMode;
+    spacetimeAnomalyGroup.visible = currentDemonMode;
+
+    if (currentSurvivorMode) {
+      headSkinOrHelmMat.color.setHex(0xf4c29f);
+      headSkinOrHelmMat.emissive.setHex(0x000000);
+      darkArmorMat.color.setHex(0x1e3a8a);
+      darkArmorMat.emissive.setHex(0x000000);
+      crimsonTrimMat.color.setHex(0xd97706);
+      crimsonTrimMat.emissive.setHex(0x000000);
+      glowingRedMat.color.setHex(0x38bdf8);
+      hornMat.color.setHex(0xd6d3d1);
+      hpBarFillMat.color.setHex(0x38bdf8);
+      distortionUniforms.uDistortStrength.value = 0;
+      hornL.scale.set(1, 1, 1);
+      hornR.scale.set(1, 1, 1);
+    } else if (currentDemonMode) {
+      headSkinOrHelmMat.color.setHex(0x090214);
+      headSkinOrHelmMat.emissive.setHex(0x4c1d95);
+      headSkinOrHelmMat.emissiveIntensity = 0.85;
+      darkArmorMat.color.setHex(0x0f0524);
+      darkArmorMat.emissive.setHex(0x581c87);
+      darkArmorMat.emissiveIntensity = 0.9;
+      crimsonTrimMat.color.setHex(0x7e22ce);
+      crimsonTrimMat.emissive.setHex(0xa855f7);
+      crimsonTrimMat.emissiveIntensity = 1.1;
+      glowingRedMat.color.setHex(0xd946ef);
+      hornMat.color.setHex(0xc084fc);
+      hpBarFillMat.color.setHex(0xa855f7);
+      distortionUniforms.uDistortStrength.value = 1.0;
+      hornL.scale.set(1.35, 1.65, 1.35);
+      hornR.scale.set(1.35, 1.65, 1.35);
+    } else {
+      headSkinOrHelmMat.color.setHex(0x1e1b2e);
+      headSkinOrHelmMat.emissive.setHex(0x000000);
+      darkArmorMat.color.setHex(0x1e1b2e);
+      darkArmorMat.emissive.setHex(0x000000);
+      crimsonTrimMat.color.setHex(0x991b1b);
+      crimsonTrimMat.emissive.setHex(0x000000);
+      glowingRedMat.color.setHex(0xf43f5e);
+      hornMat.color.setHex(0xd6d3d1);
+      hpBarFillMat.color.setHex(0xf43f5e);
+      distortionUniforms.uDistortStrength.value = 0;
+      hornL.scale.set(1, 1, 1);
+      hornR.scale.set(1, 1, 1);
+    }
+  };
+
   const setHumanSurvivorMode = (isSurvivor: boolean) => {
     if (currentSurvivorMode === isSurvivor) return;
     currentSurvivorMode = isSurvivor;
+    if (isSurvivor) currentDemonMode = false;
+    applyModeColors();
+  };
 
-    hornL.visible = !isSurvivor;
-    hornR.visible = !isSurvivor;
-    survivorHairGroup.visible = isSurvivor;
-
-    if (isSurvivor) {
-      headSkinOrHelmMat.color.setHex(0xf4c29f); // Visage humain
-      darkArmorMat.color.setHex(0x1e3a8a); // Tunique de la Résistance Humaine
-      crimsonTrimMat.color.setHex(0xd97706); // Épaulières bronze/or et lame acier clair
-      glowingRedMat.color.setHex(0x38bdf8); // Yeux déterminés & lame Aethérique bleue
-      hpBarFillMat.color.setHex(0x38bdf8);
-    } else {
-      headSkinOrHelmMat.color.setHex(0x1e1b2e);
-      darkArmorMat.color.setHex(0x1e1b2e);
-      crimsonTrimMat.color.setHex(0x991b1b);
-      glowingRedMat.color.setHex(0xf43f5e);
-      hpBarFillMat.color.setHex(0xf43f5e);
+  const setSpacetimeDemonMode = (isDemon: boolean, timeSec = 0) => {
+    if (isDemon) {
+      distortionUniforms.uTime.value = timeSec;
+      riftRing1.rotation.z = timeSec * 2.8;
+      riftRing2.rotation.x = timeSec * 3.4;
+      spacetimeAnomalyGroup.rotation.y = -timeSec * 1.9;
     }
+    if (currentDemonMode === isDemon) return;
+    currentDemonMode = isDemon;
+    if (isDemon) currentSurvivorMode = false;
+    applyModeColors();
   };
 
   const startPos = new THREE.Vector3(x, y, z);
@@ -788,13 +909,13 @@ export function createEnemyMesh(
     attackAnimTimer: 0,
     hurtFlashTimer: 0,
     walkPhase: Math.random() * 10,
+    warpCooldown: 1.5 + Math.random() * 2.5,
+    spacetimeAnomalyGroup,
     setHumanSurvivorMode,
+    setSpacetimeDemonMode,
   };
 }
 
-/**
- * Construit un Camp de Maraudeurs 3D (Tente, Feu de camp, Bannière)
- */
 export function createEnemyCampGroup(x: number, y: number, z: number): THREE.Group {
   const campGroup = new THREE.Group();
   campGroup.position.set(x, y, z);
@@ -871,9 +992,6 @@ export function createEnemyCampGroup(x: number, y: number, z: number): THREE.Gro
   return campGroup;
 }
 
-/**
- * Crée une Caisse / Trousse de Flèches ramassable
- */
 export function createLootPickupMesh(
   id: string,
   x: number,
@@ -927,9 +1045,6 @@ export function createLootPickupMesh(
   };
 }
 
-/**
- * Crée un projectile de flèche 3D tiré par l'arc du joueur
- */
 export function createArrowProjectileMesh(): THREE.Group {
   const group = new THREE.Group();
 
@@ -962,16 +1077,59 @@ export function createArrowProjectileMesh(): THREE.Group {
   return group;
 }
 
-/**
- * Crée un projectile de Mini-Éclair Rouge tiré à distance en post-game (Mauvaise Fin)
- */
+export function createCometArrowProjectileMesh(): THREE.Group {
+  const group = new THREE.Group();
+
+  const coreBeam = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.035, 0.015, 1.55, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffffff })
+  );
+  coreBeam.rotation.x = Math.PI / 2;
+  group.add(coreBeam);
+
+  const starHead = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.14, 0),
+    new THREE.MeshBasicMaterial({ color: 0xfef08a })
+  );
+  starHead.position.z = 0.75;
+  group.add(starHead);
+
+  const astralRing = new THREE.Mesh(
+    new THREE.TorusGeometry(0.18, 0.022, 6, 16),
+    new THREE.MeshBasicMaterial({
+      color: 0x67e8f9,
+      transparent: true,
+      opacity: 0.9,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+  );
+  astralRing.position.z = 0.35;
+  group.add(astralRing);
+
+  const cometTail = new THREE.Mesh(
+    new THREE.ConeGeometry(0.18, 0.95, 8),
+    new THREE.MeshBasicMaterial({
+      color: 0xfde047,
+      transparent: true,
+      opacity: 0.55,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+  );
+  cometTail.rotation.x = -Math.PI / 2;
+  cometTail.position.z = -0.45;
+  group.add(cometTail);
+
+  return group;
+}
+
 export function createLightningBoltProjectileMesh(): THREE.Group {
   const group = new THREE.Group();
 
   const coreMat = new THREE.MeshBasicMaterial({ color: 0xf43f5e });
   const innerMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
 
-  // Segments en zigzag formant un mini-éclair ardent
   for (let i = 0; i < 4; i++) {
     const seg = new THREE.Mesh(
       new THREE.BoxGeometry(0.07, 0.07, 0.45),
