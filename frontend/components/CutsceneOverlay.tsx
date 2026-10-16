@@ -111,15 +111,26 @@ export const CutsceneOverlay: React.FC<CutsceneOverlayProps> = ({
       displaySubtitle =
         'Loin de se dissiper, vos 10 Orbes ont fusionné avec le Cœur Solaire en vous ! Paré d’une armure astrale blanc et or, vous conservez et transcendez tous vos pouvoirs divins (Saut Dimensionnel, Firmament, Jugement du Cosmos) face aux Démons de l’Espace-Temps.';
     } else if (endingChoice === 'RULE_WORLD') {
-      displayTitle = 'Le Règne du Souverain Aethérique';
+      displayTitle = 'L’Ascension du Souverain du Néant';
       displaySubtitle =
-        'Vous avez absorbé le Réceptacle et conservé les 10 Orbes. Le ciel s’embrase sous votre volonté : le monde reste tel qu’il est, mais vous en êtes désormais le Maître absolu.';
+        'J’assume pleinement ma chute : ce monde n’était qu’un brasier destiné à nourrir mon éveil. En dévorant le Cœur d’Aetheria et en brisant cette réalité, j’asservis l’abîme pour alimenter ma conquête des autres dimensions du multivers !';
     }
   }
 
   return (
     <div className="fixed inset-0 z-20 pointer-events-none flex flex-col justify-between select-none font-sans">
-      <div className="w-full h-20 sm:h-24 bg-gradient-to-b from-black via-black/90 to-transparent flex items-start justify-between px-6 sm:px-10 pt-5">
+      {endingChoice === 'RULE_WORLD' && (
+        <div
+          className="fixed inset-0 pointer-events-none z-10 transition-opacity duration-500"
+          style={{
+            background:
+              'radial-gradient(circle at center, transparent 32%, rgba(88, 28, 135, 0.42) 72%, rgba(9, 2, 18, 0.94) 100%)',
+            boxShadow:
+              'inset 0 0 130px rgba(225, 29, 72, 0.48), inset 0 0 60px rgba(147, 51, 234, 0.55)',
+          }}
+        />
+      )}
+      <div className="w-full h-20 sm:h-24 bg-gradient-to-b from-black via-black/90 to-transparent flex items-start justify-between px-6 sm:px-10 pt-5 relative z-20">
         <div className="flex items-center gap-2.5 text-xs font-bold tracking-[0.2em] uppercase text-cyan-300/90">
           <Sparkles className="w-4 h-4 text-cyan-400 animate-pulse" />
           <span>{current.chapter}</span>
@@ -137,7 +148,7 @@ export const CutsceneOverlay: React.FC<CutsceneOverlayProps> = ({
       </div>
 
       {isWaitingForChoice && onSelectEndingChoice && (
-        <div className="pointer-events-auto flex-1 flex items-center justify-center px-4">
+        <div className="pointer-events-auto flex-1 flex items-center justify-center px-4 relative z-20">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 max-w-3xl w-full">
             <button
               onClick={() => onSelectEndingChoice('SAVE_WORLD')}
@@ -165,24 +176,24 @@ export const CutsceneOverlay: React.FC<CutsceneOverlayProps> = ({
 
             <button
               onClick={() => onSelectEndingChoice('RULE_WORLD')}
-              className="group bg-slate-950/85 hover:bg-rose-950/80 backdrop-blur-xl border-2 border-rose-500/50 hover:border-amber-400 rounded-3xl p-6 text-left transition-all transform hover:scale-[1.03] shadow-[0_0_40px_rgba(244,63,94,0.25)] cursor-pointer flex flex-col justify-between"
+              className="group bg-slate-950/85 hover:bg-rose-950/80 backdrop-blur-xl border-2 border-rose-500/60 hover:border-fuchsia-400 rounded-3xl p-6 text-left transition-all transform hover:scale-[1.03] shadow-[0_0_45px_rgba(244,63,94,0.35)] cursor-pointer flex flex-col justify-between"
             >
               <div>
                 <div className="w-12 h-12 rounded-2xl bg-rose-500/20 border border-rose-400/40 flex items-center justify-center text-rose-400 mb-4 group-hover:scale-110 transition-transform">
                   <Flame className="w-6 h-6" />
                 </div>
                 <div className="text-[11px] font-bold uppercase tracking-widest text-rose-400 mb-1">
-                  Voie de la Domination
+                  Voie du Néant Absolu
                 </div>
                 <h3 className="text-xl font-black text-white mb-2">
-                  Garder ses Pouvoirs & Contrôler le Monde
+                  Devenir le Souverain du Néant
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                  Laissez le monde tel qu’il est et conservez l’intégralité des 10 Orbes en vous. Vous gardez tous vos pouvoirs (Dash Éclair, Maître du Temps, Nova...) pour régner en maître.
+                  Assumez votre chute : dévorez le Réceptacle et sacrifiez cette réalité pour alimenter votre ascension vers les autres mondes. Déchaînez la foudre écarlate et scellez la dimension sous votre règne abyssal.
                 </p>
               </div>
-              <div className="mt-5 pt-3 border-t border-rose-500/20 flex items-center justify-between text-xs font-extrabold text-amber-300">
-                <span>Choisir ce destin</span>
+              <div className="mt-5 pt-3 border-t border-rose-500/20 flex items-center justify-between text-xs font-extrabold text-rose-300">
+                <span>Revendiquer le Néant</span>
                 <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </div>
             </button>
@@ -190,13 +201,22 @@ export const CutsceneOverlay: React.FC<CutsceneOverlayProps> = ({
         </div>
       )}
 
-      {/* Bande noire cinéma inférieure avec narration et contrôles */}
-      <div className="w-full bg-gradient-to-t from-black via-black/90 to-transparent pt-12 pb-7 px-6 sm:px-12 flex flex-col items-center">
+      <div className="w-full bg-gradient-to-t from-black via-black/90 to-transparent pt-12 pb-7 px-6 sm:px-12 flex flex-col items-center relative z-20">
         <div className="max-w-3xl w-full text-center space-y-2.5">
           <h2
             className={`text-xl sm:text-2xl font-black tracking-wide drop-shadow ${
-              mode === 'BOSS' ? 'text-rose-400' : 'text-amber-300'
+              mode === 'BOSS' || endingChoice === 'RULE_WORLD'
+                ? 'text-rose-400'
+                : 'text-amber-300'
             }`}
+            style={
+              endingChoice === 'RULE_WORLD'
+                ? {
+                    textShadow:
+                      '-2px 0 rgba(244, 63, 94, 0.9), 2px 0 rgba(168, 85, 247, 0.9), 0 0 18px rgba(225, 29, 72, 0.65)',
+                  }
+                : undefined
+            }
           >
             {displayTitle}
           </h2>

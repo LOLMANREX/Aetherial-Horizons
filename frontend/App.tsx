@@ -879,10 +879,28 @@ export function App() {
 
       const centerH = getTerrainHeight(0, 18) + 2.0;
       st.playerPos.set(0, centerH, 18);
+      st.playerVel.set(0, 0, 0);
       st.yaw = 0;
-      st.pitch = 0.15;
-      exitLockSafe();
-      updateScreen('VICTORY');
+      st.pitch = 0.05;
+      st.health = 100;
+      st.stamina = 100;
+      st.oxygen = 100;
+      st.dashCooldownTimer = 0;
+      st.novaCooldownTimer = 0;
+
+      if (st.endingChoice === 'RULE_WORLD') {
+        if (st.sovereignThrone) {
+          st.sovereignThrone.group.visible = true;
+        }
+        performSave(st.activeSlot);
+        showToast('SOUVERAIN DU NÉANT : Tous vos pouvoirs abyssaux sont débloqués !');
+        updateScreen('PLAYING');
+        requestLockSafe();
+      } else {
+        st.pitch = 0.15;
+        exitLockSafe();
+        updateScreen('VICTORY');
+      }
     }
   }, [exitLockSafe, performSave, requestLockSafe, respawnEnemiesAndLoot, showToast, updateScreen]);
 
@@ -2517,11 +2535,15 @@ export function App() {
     let animationFrameId: number;
     let prevTime = performance.now();
     let hudSyncTimer = 0;
+    let voidRumbleTimer = 0;
+    let voidSealSoundPlayed = false;
+    let purpleStepTrailTimer = 0;
 
     const skyDayColor = new THREE.Color(0x7dd3fc);
     const skySunsetColor = new THREE.Color(0xf97316);
     const skyNightColor = new THREE.Color(0x090d16);
     const skyChaosColor = new THREE.Color(0x2e0514);
+    const skyAbyssBlackColor = new THREE.Color(0x04010a);
     const skyTranscendentColor = new THREE.Color(0x1e1b4b);
     const underwaterFogColor = new THREE.Color(0x0369a1);
     const currentSkyColor = new THREE.Color();
@@ -2538,6 +2560,8 @@ export function App() {
 
       if (isTranscendentSavior) {
         state.timeOfDay = 11.2;
+      } else if (isCorruptedRuler) {
+        state.timeOfDay = 18.8;
       } else {
         state.timeOfDay = (state.timeOfDay + dt * 0.12) % 24;
       }
@@ -2571,6 +2595,21 @@ export function App() {
         ambientLight.intensity = 0.85;
         starsMat.opacity = 0.85;
         starField.rotation.y += dt * 0.08;
+      } else if (isCorruptedRuler) {
+        currentSkyColor.lerpColors(
+          skyAbyssBlackColor,
+          skyChaosColor,
+          0.5 + Math.sin(now * 0.0025) * 0.35
+        );
+        sunLight.intensity = 2.2;
+        sunLight.color.setHex(0xf43f5e);
+        ambientLight.intensity = 0.45;
+        starsMat.opacity = 0.7;
+        starField.rotation.y -= dt * 0.18;
+        if (state.sovereignThrone) {
+          state.sovereignThrone.group.visible = true;
+          state.sovereignThrone.updateAbyssalEffects(now * 0.001, 1.0);
+        }
       } else if (sunElevation > 0.22) {
         const t = Math.min(1, (sunElevation - 0.22) / 0.78);
         currentSkyColor.lerpColors(skySunsetColor, skyDayColor, t);
@@ -2947,25 +2986,58 @@ export function App() {
           );
           camera.lookAt(0, spawnGroundY + 7, 2);
         } else if (state.endingChoice === 'RULE_WORLD') {
-          scene.background = skyChaosColor;
-          fog.color.copy(skyChaosColor);
-          fog.density = 0.0042;
+          currentSkyColor.lerpColors(
+            skyAbyssBlackColor,
+            skyChaosColor,
+            0.35 + stepProgress * 0.55
+          );
+          scene.background = currentSkyColor;
+          fog.color.copy(currentSkyColor);
+          fog.density = 0.0046;
           sunLight.color.setHex(0xf43f5e);
-          sunLight.intensity = 2.4;
+          sunLight.intensity = 2.2 + stepProgress * 1.4;
+
+          const voidLevitation =
+            Math.min(1, stepProgress * 1.35) * 6.5 + Math.sin(now * 0.005) * 0.42;
 
           if (state.sovereignThrone) {
             state.sovereignThrone.group.visible = true;
-            playerGroup.position.set(
-              0,
-              spawnGroundY + state.sovereignThrone.seatWorldOffset.y,
-              state.sovereignThrone.seatWorldOffset.z
-            );
-            playerGroup.rotation.y = Math.PI;
-            playerGroup.visible = true;
+            state.sovereignThrone.updateAbyssalEffects(now * 0.001, stepProgress);
           }
 
-          crownGroup.position.y = 4.2 + Math.sin(now * 0.005) * 0.4;
-          crownGroup.rotation.y += dt * 3.2;
+          playerGroup.position.set(
+            0,
+            spawnGroundY + 1.2 + voidLevitation,
+            0
+          );
+          playerGroup.rotation.y = Math.PI + Math.sin(now * 0.0015) * 0.18;
+          playerGroup.visible = true;
+
+          if (state.restoredHeartMesh) {
+            state.restoredHeartMesh.position.y =
+              playerGroup.position.y - spawnGroundY + 1.4;
+            const crushScale = Math.max(0.15, 1.0 - stepProgress * 0.85);
+            state.restoredHeartMesh.scale.set(crushScale, crushScale, crushScale);
+          }
+
+          crownGroup.position.y = playerGroup.position.y - spawnGroundY + 2.2;
+          crownGroup.rotation.y += dt * (3.2 + stepProgress * 5.0);
+
+          const finalStrikeProgress =
+            stepProgress > 0.78 ? Math.min(1, (stepProgress - 0.78) / 0.18) : 0;
+
+          if (stepProgress < 0.1) {
+            voidSealSoundPlayed = false;
+          }
+          voidRumbleTimer += dt;
+          if (voidRumbleTimer >= 0.32 && stepProgress < 0.82) {
+            voidRumbleTimer = 0;
+            soundFX.playVoidChargeRumble(stepProgress);
+          }
+          if (stepProgress >= 0.82 && !voidSealSoundPlayed) {
+            voidSealSoundPlayed = true;
+            soundFX.playVoidDimensionSeal();
+          }
 
           humanoid.updateAnimation({
             dt,
@@ -2974,42 +3046,41 @@ export function App() {
             forwardInput: 0,
             rightInput: 0,
             isSprinting: false,
-            isGrounded: true,
+            isGrounded: false,
             isSwimming: false,
-            headPitch: 0,
+            headPitch: -0.22 - stepProgress * 0.25,
             equippedWeapon: 'SWORD',
-            attackProgress: 0,
+            attackProgress: finalStrikeProgress,
             bowDrawProgress: 0,
             bowReleaseTimer: 0,
             hasArrows: true,
-            isSeatedOnThrone: true,
+            isSeatedOnThrone: false,
             isCorrupted: true,
+            isCelestial: false,
           });
 
-          if (stepIdx === 2) {
-            const shakeX = (Math.random() - 0.5) * 0.22;
-            const shakeY = (Math.random() - 0.5) * 0.22;
-            const camDist = 11.0 - stepProgress * 3.8;
-            const camAngle = Math.sin(now * 0.0005) * 0.55;
-            camera.up.set(Math.sin(now * 0.003) * 0.14, 1, 0);
-            camera.position.set(
-              Math.sin(camAngle) * camDist + shakeX,
-              spawnGroundY + 2.5 + stepProgress * 1.0 + shakeY,
-              Math.cos(camAngle) * camDist
-            );
-            camera.lookAt(0, spawnGroundY + 2.3, 0);
-          } else {
-            const a = now * 0.00045;
-            const r = 16 + stepProgress * 18;
-            const tiltRoll = Math.sin(now * 0.0018) * 0.32;
-            camera.up.set(Math.sin(tiltRoll), Math.cos(tiltRoll), 0);
-            camera.position.set(
-              Math.sin(a) * r,
-              spawnGroundY + 8 + stepProgress * 12,
-              Math.cos(a) * r
-            );
-            camera.lookAt(0, spawnGroundY + 3.5, 0);
-          }
+          const energyCharge = Math.pow(stepProgress, 1.75);
+          const sealBurst =
+            stepProgress >= 0.8 && stepProgress <= 0.95 ? 0.65 : 0;
+          const shakeAmp = energyCharge * 0.42 + sealBurst;
+          const shakeX = (Math.random() - 0.5) * shakeAmp;
+          const shakeY = (Math.random() - 0.5) * shakeAmp;
+
+          const camAngle = Math.sin(now * 0.0004) * 0.45 + stepProgress * 0.65;
+          const camDist = 4.2 + stepProgress * 8.5;
+          const camHeight = spawnGroundY + 0.45 + Math.pow(stepProgress, 1.15) * 14.2;
+          const tiltRoll = Math.sin(now * 0.004) * (0.04 + energyCharge * 0.12);
+          camera.up.set(Math.sin(tiltRoll), Math.cos(tiltRoll), 0);
+          camera.position.set(
+            Math.sin(camAngle) * camDist + shakeX,
+            camHeight + shakeY,
+            Math.cos(camAngle) * camDist
+          );
+          camera.lookAt(
+            0,
+            playerGroup.position.y + 0.6 + stepProgress * 3.8,
+            0
+          );
         } else {
           currentSkyColor.lerpColors(skyTranscendentColor, skyDayColor, 0.55);
           scene.background = currentSkyColor;
@@ -3517,6 +3588,43 @@ export function App() {
         playerGroup.rotation.y = state.yaw;
         playerGroup.visible = state.cameraMode === 'THIRD_PERSON';
         fpViewModel.group.visible = state.cameraMode === 'FIRST_PERSON';
+
+        if (isCorruptedRuler && horizontalSpeed > 1.5) {
+          purpleStepTrailTimer += dt;
+          if (purpleStepTrailTimer >= 0.08) {
+            purpleStepTrailTimer = 0;
+            const trailGroup = new THREE.Group();
+            const pts: THREE.Vector3[] = [];
+            const basePos = new THREE.Vector3(
+              state.playerPos.x + (Math.random() - 0.5) * 0.5,
+              state.playerPos.y - eyeOffset + 0.15,
+              state.playerPos.z + (Math.random() - 0.5) * 0.5
+            );
+            for (let s = 0; s <= 4; s++) {
+              pts.push(
+                new THREE.Vector3(
+                  basePos.x + (Math.random() - 0.5) * 0.45,
+                  basePos.y + s * 0.35,
+                  basePos.z + (Math.random() - 0.5) * 0.45
+                )
+              );
+            }
+            const arcLine = new THREE.Line(
+              new THREE.BufferGeometry().setFromPoints(pts),
+              new THREE.LineBasicMaterial({
+                color: Math.random() > 0.4 ? 0xa855f7 : 0xf43f5e,
+              })
+            );
+            trailGroup.add(arcLine);
+            scene.add(trailGroup);
+            state.visualEffects.push({
+              mesh: trailGroup,
+              age: 0,
+              maxAge: 0.42,
+              type: 'CONSTELLATION_TRAIL',
+            });
+          }
+        }
 
         humanoid.updateAnimation({
           dt,
@@ -4195,12 +4303,32 @@ export function App() {
             requestLockSafe();
           }
         }}
+        style={
+          endingChoice === 'RULE_WORLD'
+            ? {
+                filter:
+                  'contrast(1.12) saturate(1.22) drop-shadow(-2px 0px 0px rgba(244,63,94,0.42)) drop-shadow(2px 0px 0px rgba(168,85,247,0.42))',
+              }
+            : undefined
+        }
         className={`fixed inset-0 w-full h-full z-0 ${
           screen === 'PLAYING' && isMouseCaptured
             ? 'cursor-none'
             : 'cursor-crosshair'
         }`}
       />
+
+      {endingChoice === 'RULE_WORLD' && (
+        <div
+          className="fixed inset-0 pointer-events-none z-10"
+          style={{
+            background:
+              'radial-gradient(circle at center, transparent 42%, rgba(88, 28, 135, 0.34) 76%, rgba(9, 2, 18, 0.88) 100%)',
+            boxShadow:
+              'inset 0 0 110px rgba(225, 29, 72, 0.38), inset 0 0 55px rgba(147, 51, 234, 0.45)',
+          }}
+        />
+      )}
 
       <div
         className="fixed inset-0 bg-black pointer-events-none z-50 transition-opacity duration-1000"

@@ -412,9 +412,69 @@ class SoundEffects {
         osc.start(now + idx * 0.06);
         osc.stop(now + idx * 0.06 + 2.5);
       });
-    } catch {
-      // Ignore audio errors
+    } catch {}
+  }
+
+  public playVoidChargeRumble(chargeProgress: number): void {
+    const ctx = this.getContext();
+    if (!ctx || ctx.state !== 'running') return;
+
+    try {
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      const baseFreq = 38 + chargeProgress * 55;
+      osc.frequency.setValueAtTime(baseFreq, now);
+      osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.72, now + 0.25);
+
+      const amp = Math.min(0.18, 0.04 + chargeProgress * 0.14);
+      gain.gain.setValueAtTime(amp, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.27);
+    } catch {}
+  }
+
+  public playVoidDimensionSeal(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
     }
+
+    try {
+      const now = ctx.currentTime;
+      const subOsc = ctx.createOscillator();
+      const subGain = ctx.createGain();
+      subOsc.type = 'sine';
+      subOsc.frequency.setValueAtTime(115, now);
+      subOsc.frequency.exponentialRampToValueAtTime(22, now + 1.45);
+      subGain.gain.setValueAtTime(0.38, now);
+      subGain.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
+      subOsc.connect(subGain);
+      subGain.connect(ctx.destination);
+      subOsc.start(now);
+      subOsc.stop(now + 1.55);
+
+      const impactFreqs = [82.41, 61.74, 41.2];
+      impactFreqs.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(freq * 1.6, now + idx * 0.04);
+        osc.frequency.exponentialRampToValueAtTime(freq * 0.45, now + 1.35);
+        gain.gain.setValueAtTime(0.16, now + idx * 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 1.4);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + idx * 0.04);
+        osc.stop(now + 1.42);
+      });
+    } catch {}
   }
 }
 

@@ -631,6 +631,25 @@ export function createHumanoidCharacter(): HumanoidCharacter {
   rightEye.position.set(0.075, 0.24, -0.162);
   headPivot.add(rightEye);
 
+  const corruptedEyeGlowGroup = new THREE.Group();
+  corruptedEyeGlowGroup.visible = false;
+  const redEyeFlareMat = new THREE.MeshBasicMaterial({
+    color: 0xff1744,
+    transparent: true,
+    opacity: 0.9,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  for (const sign of [-1, 1]) {
+    const flare = new THREE.Mesh(
+      new THREE.BoxGeometry(0.095, 0.032, 0.025),
+      redEyeFlareMat
+    );
+    flare.position.set(sign * 0.075, 0.24, -0.168);
+    corruptedEyeGlowGroup.add(flare);
+  }
+  headPivot.add(corruptedEyeGlowGroup);
+
   const leftBrow = new THREE.Mesh(
     new THREE.BoxGeometry(0.065, 0.02, 0.025),
     hairMat
@@ -827,6 +846,61 @@ export function createHumanoidCharacter(): HumanoidCharacter {
   }
   torsoPivot.add(celestialHaloGroup);
 
+  const voidShadowAuraGroup = new THREE.Group();
+  voidShadowAuraGroup.position.set(0, 0.32, 0);
+  voidShadowAuraGroup.visible = false;
+
+  const shadowMat = new THREE.MeshBasicMaterial({
+    color: 0x05010a,
+    transparent: true,
+    opacity: 0.82,
+    side: THREE.DoubleSide,
+  });
+
+  const crimsonAuraMat = new THREE.MeshBasicMaterial({
+    color: 0xf43f5e,
+    transparent: true,
+    opacity: 0.85,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+
+  const purpleLightningMat = new THREE.MeshBasicMaterial({
+    color: 0xa855f7,
+    transparent: true,
+    opacity: 0.85,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+
+  const shadowRing1 = new THREE.Mesh(
+    new THREE.TorusGeometry(0.62, 0.035, 8, 24),
+    shadowMat
+  );
+  shadowRing1.rotation.x = Math.PI / 2.6;
+  voidShadowAuraGroup.add(shadowRing1);
+
+  const shadowRing2 = new THREE.Mesh(
+    new THREE.TorusGeometry(0.74, 0.022, 8, 24),
+    crimsonAuraMat
+  );
+  shadowRing2.rotation.y = Math.PI / 3;
+  voidShadowAuraGroup.add(shadowRing2);
+
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const tendril = new THREE.Mesh(
+      new THREE.ConeGeometry(0.08, 0.65, 5),
+      i % 2 === 0 ? shadowMat : i % 4 === 1 ? crimsonAuraMat : purpleLightningMat
+    );
+    tendril.position.set(Math.cos(a) * 0.56, (i % 3 - 1) * 0.18, Math.sin(a) * 0.56);
+    tendril.rotation.z = Math.sin(a) * 0.4;
+    voidShadowAuraGroup.add(tendril);
+  }
+  torsoPivot.add(voidShadowAuraGroup);
+
   let walkCycle = 0;
 
   const updateAnimation = ({
@@ -871,10 +945,13 @@ export function createHumanoidCharacter(): HumanoidCharacter {
     setSwordCorrupted(isCorrupted, isCelestial, tSec);
     setBowCorrupted(isCorrupted, isCelestial, tSec);
     celestialHaloGroup.visible = isCelestial;
+    voidShadowAuraGroup.visible = isCorrupted;
+    corruptedEyeGlowGroup.visible = isCorrupted;
 
     if (isCelestial) {
       backHaloRing.rotation.z = tSec * 1.4;
       innerHaloRing.rotation.z = -tSec * 2.2;
+      eyeMat.color.setHex(0xfef08a);
       tunicMat.color.setHex(0xffffff);
       tunicMat.emissive.setHex(0xfef08a);
       tunicMat.emissiveIntensity = 0.65;
@@ -894,20 +971,30 @@ export function createHumanoidCharacter(): HumanoidCharacter {
       crystalMat.emissive.setHex(0x38bdf8);
       crystalMat.emissiveIntensity = 2.4;
     } else if (isCorrupted) {
-      tunicMat.color.setHex(0x181028);
-      tunicMat.emissive.setHex(0x000000);
+      voidShadowAuraGroup.rotation.y = tSec * 2.4;
+      shadowRing1.rotation.z = -tSec * 3.1;
+      shadowRing2.rotation.x = tSec * 2.8;
+      voidShadowAuraGroup.position.y = 0.32 + Math.sin(tSec * 4.5) * 0.08;
+      eyeMat.color.setHex(0xff1744);
+      tunicMat.color.setHex(0x090314);
+      tunicMat.emissive.setHex(0x3b0764);
+      tunicMat.emissiveIntensity = 0.55;
       armorTrimMat.color.setHex(0xe11d48);
-      armorTrimMat.emissive.setHex(0x000000);
-      scarfMat.color.setHex(0xe11d48);
-      scarfMat.emissive.setHex(0x000000);
-      pantsMat.color.setHex(0x1e293b);
+      armorTrimMat.emissive.setHex(0xbe123c);
+      armorTrimMat.emissiveIntensity = 0.85;
+      scarfMat.color.setHex(0x9f1239);
+      scarfMat.emissive.setHex(0xe11d48);
+      scarfMat.emissiveIntensity = 0.5;
+      pantsMat.color.setHex(0x090414);
       pantsMat.emissive.setHex(0x000000);
-      hairMat.color.setHex(0x271c19);
-      hairMat.emissive.setHex(0x000000);
+      hairMat.color.setHex(0x0f071e);
+      hairMat.emissive.setHex(0x4c0519);
+      hairMat.emissiveIntensity = 0.45;
       crystalMat.color.setHex(0xf43f5e);
       crystalMat.emissive.setHex(0xe11d48);
-      crystalMat.emissiveIntensity = 1.8;
+      crystalMat.emissiveIntensity = 2.4;
     } else {
+      eyeMat.color.setHex(0x0f172a);
       tunicMat.color.setHex(0x0f4c81);
       tunicMat.emissive.setHex(0x000000);
       armorTrimMat.color.setHex(0x38bdf8);

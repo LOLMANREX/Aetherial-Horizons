@@ -57,6 +57,9 @@ export interface SovereignThrone3D {
   floatingMonoliths: THREE.Group;
   chaosRings: THREE.Group;
   lightningBolts: THREE.Line[];
+  darkMatterGeysers: THREE.Group;
+  crimsonArcs: THREE.Line[];
+  updateAbyssalEffects: (timeSec: number, chargeIntensity?: number) => void;
 }
 
 export interface ArrowProjectile3D {
@@ -78,10 +81,6 @@ export interface LootPickup3D {
   collected: boolean;
 }
 
-/**
- * Construit le Trône Impérial d'Obsidienne et le Vortex Chaotique lorsque le joueur choisit
- * de garder ses pouvoirs pour contrôler le monde (RULE_WORLD).
- */
 export function createSovereignThroneMesh(x: number, y: number, z: number): SovereignThrone3D {
   const group = new THREE.Group();
   group.position.set(x, y, z);
@@ -98,12 +97,162 @@ export function createSovereignThroneMesh(x: number, y: number, z: number): Sove
     color: 0xf43f5e,
   });
 
+  const darkMatterMat = new THREE.MeshBasicMaterial({
+    color: 0x05010d,
+    transparent: true,
+    opacity: 0.92,
+  });
+
   const goldMat = new THREE.MeshStandardMaterial({
     color: 0xfbbf24,
     roughness: 0.25,
     metalness: 0.85,
     flatShading: true,
   });
+
+  const abyssalUniforms = {
+    uTime: { value: 0 },
+    uCharge: { value: 1.0 },
+  };
+
+  const crackedGroundMat = new THREE.ShaderMaterial({
+    uniforms: abyssalUniforms,
+    transparent: true,
+    side: THREE.DoubleSide,
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vPos;
+      void main() {
+        vUv = uv;
+        vPos = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform float uCharge;
+      varying vec2 vUv;
+      varying vec3 vPos;
+      void main() {
+        vec2 p = (vUv - 0.5) * 18.0;
+        float r = length(p);
+        if (r > 8.8) discard;
+        float angle = atan(p.y, p.x);
+        float crack1 = abs(sin(angle * 7.0 + sin(r * 3.2 - uTime * 2.4)));
+        float crack2 = abs(cos(r * 4.5 - angle * 5.0 + sin(uTime * 1.8)));
+        float fissure = smoothstep(0.16, 0.01, crack1 * crack2);
+        float pulse = 0.65 + 0.35 * sin(uTime * 5.0 - r * 1.5);
+        vec3 baseRock = vec3(0.03, 0.01, 0.06);
+        vec3 crimsonLava = mix(vec3(0.55, 0.04, 0.22), vec3(1.0, 0.12, 0.32), pulse);
+        vec3 col = mix(baseRock, crimsonLava, fissure * (0.6 + 0.4 * uCharge));
+        float edgeFade = smoothstep(8.8, 5.5, r);
+        gl_FragColor = vec4(col, edgeFade * 0.95);
+      }
+    `,
+  });
+
+  const crackedGroundMesh = new THREE.Mesh(
+    new THREE.CircleGeometry(32, 48),
+    crackedGroundMat
+  );
+  crackedGroundMesh.rotation.x = -Math.PI / 2;
+  crackedGroundMesh.position.y = 0.08;
+  group.add(crackedGroundMesh);
+
+  const skyVortexMat = new THREE.ShaderMaterial({
+    uniforms: abyssalUniforms,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    vertexShader: `
+      uniform float uTime;
+      uniform float uCharge;
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        vec3 pos = position;
+        float twist = uTime * 1.6 + (1.0 - uv.y) * 6.0;
+        float pinch = sin(uv.y * 8.0 - uTime * 3.5) * 1.8 * uCharge;
+        pos.x += cos(twist) * pinch;
+        pos.z += sin(twist) * pinch;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform float uCharge;
+      varying vec2 vUv;
+      void main() {
+        float spiral = sin(vUv.x * 37.699 + vUv.y * 18.0 - uTime * 4.2);
+        float bands = smoothstep(-0.2, 0.85, spiral);
+        vec3 inkBlack = vec3(0.02, 0.0, 0.05);
+        vec3 scarlet = vec3(0.95, 0.12, 0.32);
+        vec3 voidPurple = vec3(0.52, 0.08, 0.78);
+        vec3 col = mix(inkBlack, mix(voidPurple, scarlet, bands), bands);
+        float alpha = (1.0 - abs(vUv.y - 0.5) * 1.85) * (0.45 + 0.4 * bands) * (0.65 + 0.35 * uCharge);
+        gl_FragColor = vec4(col, clamp(alpha, 0.0, 0.9));
+      }
+    `,
+  });
+
+  const abyssalVortexMesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(72, 4.5, 52, 36, 16, true),
+    skyVortexMat
+  );
+  abyssalVortexMesh.position.set(0, 38, 0);
+  group.add(abyssalVortexMesh);
+
+  const darkMatterGeysers = new THREE.Group();
+  for (let g = 0; g < 10; g++) {
+    const a = (g / 10) * Math.PI * 2 + 0.25;
+    const dist = 7.5 + (g % 3) * 6.2;
+    const geyserPivot = new THREE.Group();
+    geyserPivot.position.set(Math.cos(a) * dist, 0, Math.sin(a) * dist);
+
+    const outerCore = new THREE.Mesh(
+      new THREE.ConeGeometry(0.95, 9.5, 7, 1, true),
+      darkMatterMat
+    );
+    outerCore.position.y = 4.75;
+    geyserPivot.add(outerCore);
+
+    const innerStream = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.18, 0.55, 11.0, 6),
+      crimsonGlowMat
+    );
+    innerStream.position.y = 5.2;
+    geyserPivot.add(innerStream);
+
+    darkMatterGeysers.add(geyserPivot);
+  }
+  group.add(darkMatterGeysers);
+
+  const crimsonArcs: THREE.Line[] = [];
+  for (let c = 0; c < 12; c++) {
+    const a = (c / 12) * Math.PI * 2;
+    const startR = 3.5 + (c % 3) * 4.0;
+    const pts: THREE.Vector3[] = [];
+    for (let s = 0; s <= 6; s++) {
+      const t = s / 6;
+      const r = startR + t * 8.5;
+      const jitterA = a + (Math.random() - 0.5) * 0.35;
+      pts.push(
+        new THREE.Vector3(
+          Math.cos(jitterA) * r,
+          0.25 + Math.sin(t * Math.PI) * (1.2 + (c % 3) * 0.8) + Math.random() * 0.6,
+          Math.sin(jitterA) * r
+        )
+      );
+    }
+    const arcGeo = new THREE.BufferGeometry().setFromPoints(pts);
+    const arcLine = new THREE.Line(
+      arcGeo,
+      new THREE.LineBasicMaterial({ color: c % 2 === 0 ? 0xf43f5e : 0xa855f7 })
+    );
+    group.add(arcLine);
+    crimsonArcs.push(arcLine);
+  }
 
   const step1 = new THREE.Mesh(
     new THREE.CylinderGeometry(4.2, 4.8, 0.5, 8),
@@ -218,12 +367,38 @@ export function createSovereignThroneMesh(x: number, y: number, z: number): Sove
     lightningBolts.push(bolt);
   }
 
+  const updateAbyssalEffects = (timeSec: number, chargeIntensity = 1.0) => {
+    abyssalUniforms.uTime.value = timeSec;
+    abyssalUniforms.uCharge.value = chargeIntensity;
+    abyssalVortexMesh.rotation.y = -timeSec * 0.9;
+    chaosRings.rotation.y = timeSec * 1.4;
+    floatingMonoliths.rotation.y = timeSec * 0.35;
+
+    darkMatterGeysers.children.forEach((geyser, idx) => {
+      const pulse = 0.55 + 0.65 * Math.abs(Math.sin(timeSec * 3.8 + idx * 0.9));
+      geyser.scale.set(1, pulse * (0.7 + 0.5 * chargeIntensity), 1);
+      geyser.rotation.y = timeSec * 2.2 + idx;
+    });
+
+    crimsonArcs.forEach((arc, idx) => {
+      arc.visible = Math.sin(timeSec * 16.0 + idx * 1.7) > -0.25;
+      arc.rotation.y = Math.sin(timeSec * 3.0 + idx) * 0.15;
+    });
+
+    lightningBolts.forEach((bolt, idx) => {
+      bolt.visible = Math.cos(timeSec * 14.0 + idx * 2.1) > -0.15;
+    });
+  };
+
   return {
     group,
     seatWorldOffset: new THREE.Vector3(0, 1.15, 0.08),
     floatingMonoliths,
     chaosRings,
     lightningBolts,
+    darkMatterGeysers,
+    crimsonArcs,
+    updateAbyssalEffects,
   };
 }
 
