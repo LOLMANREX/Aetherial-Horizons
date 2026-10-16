@@ -71,8 +71,29 @@ export const OUTRO_SLIDES: CutsceneSlide[] = [
   },
 ];
 
+export const CLASH_SLIDES: CutsceneSlide[] = [
+  {
+    chapter: 'ANOMALIE MULTIVERSELLE • RUPTURE DE LA TIMELINE',
+    title: 'La Lumière Interrompue !',
+    subtitle:
+      'Alors que votre ascension céleste s’apprête à bénir Aetheria, une onde gravitationnelle écarlate fracasse le firmament ! L’écho d’une autre ligne temporelle — celle où vous avez choisi d’être le Souverain du Néant — refuse de s’effacer.',
+  },
+  {
+    chapter: 'COLLISION DES DEUX MONDES',
+    title: 'La Faille Dimensionnelle S’Ouvre',
+    subtitle:
+      'Le ciel se déchire en deux : moitié aurore cosmique dorée, moitié vortex abyssal rouge écarlate ! Au centre du Sanctuaire fracturé, une brèche interdimensionnelle s’ouvre dans un fracas assourdissant.',
+  },
+  {
+    chapter: 'DUEL AU SOMMET DU MULTIVERS',
+    title: 'L’Alter Ego du Néant Émerge !',
+    subtitle:
+      'Votre propre double corrompu franchit la faille, armé de la Lame du Néant et entouré d’ombres mouvantes : « Une seule réalité survivra à notre collision. » Préparez votre Arsenal Céleste pour le choc ultime dans l’Arène de Collision !',
+  },
+];
+
 interface CutsceneOverlayProps {
-  mode: 'INTRO' | 'BOSS' | 'OUTRO';
+  mode: 'INTRO' | 'BOSS' | 'OUTRO' | 'CLASH';
   stepIndex: number;
   stepProgress: number;
   endingChoice: EndingChoice;
@@ -97,6 +118,8 @@ export const CutsceneOverlay: React.FC<CutsceneOverlayProps> = ({
       ? INTRO_SLIDES
       : mode === 'BOSS'
       ? BOSS_SLIDES
+      : mode === 'CLASH'
+      ? CLASH_SLIDES
       : OUTRO_SLIDES;
   const current = slides[Math.min(stepIndex, slides.length - 1)];
 
@@ -119,7 +142,7 @@ export const CutsceneOverlay: React.FC<CutsceneOverlayProps> = ({
 
   return (
     <div className="fixed inset-0 z-20 pointer-events-none flex flex-col justify-between select-none font-sans">
-      {endingChoice === 'RULE_WORLD' && (
+      {endingChoice === 'RULE_WORLD' && mode !== 'CLASH' && (
         <div
           className="fixed inset-0 pointer-events-none z-10 transition-opacity duration-500"
           style={{
@@ -127,6 +150,17 @@ export const CutsceneOverlay: React.FC<CutsceneOverlayProps> = ({
               'radial-gradient(circle at center, transparent 32%, rgba(88, 28, 135, 0.42) 72%, rgba(9, 2, 18, 0.94) 100%)',
             boxShadow:
               'inset 0 0 130px rgba(225, 29, 72, 0.48), inset 0 0 60px rgba(147, 51, 234, 0.55)',
+          }}
+        />
+      )}
+      {mode === 'CLASH' && (
+        <div
+          className="fixed inset-0 pointer-events-none z-10 transition-opacity duration-500"
+          style={{
+            background:
+              'linear-gradient(90deg, rgba(225, 29, 72, 0.28) 0%, transparent 45%, transparent 55%, rgba(250, 204, 21, 0.25) 100%)',
+            boxShadow:
+              'inset 50px 0 110px rgba(225, 29, 72, 0.42), inset -50px 0 110px rgba(250, 204, 21, 0.38)',
           }}
         />
       )}
@@ -257,7 +291,7 @@ export const CutsceneOverlay: React.FC<CutsceneOverlayProps> = ({
               <button
                 onClick={onNextStep}
                 className={`pointer-events-auto px-5 py-2 rounded-full font-extrabold text-xs flex items-center gap-1.5 shadow-lg transition-all cursor-pointer ${
-                  mode === 'BOSS' || endingChoice === 'RULE_WORLD'
+                  mode === 'BOSS' || mode === 'CLASH' || endingChoice === 'RULE_WORLD'
                     ? 'bg-rose-500 hover:bg-rose-400 text-white shadow-rose-500/25'
                     : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-500/20'
                 }`}
@@ -269,6 +303,8 @@ export const CutsceneOverlay: React.FC<CutsceneOverlayProps> = ({
                     ? 'Commencer l’aventure'
                     : mode === 'BOSS'
                     ? 'Affronter le Boss !'
+                    : mode === 'CLASH'
+                    ? 'Affronter l’Alter Ego du Néant !'
                     : 'Terminer'}
                 </span>
                 <ChevronRight className="w-4 h-4" />

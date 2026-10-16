@@ -3,6 +3,88 @@ import { db, ensureAuthenticated } from '../services/firebase';
 import { doc, setDoc, deleteDoc, getDocs, collection } from 'firebase/firestore';
 
 const STORAGE_KEY = 'aetherial_horizons_saves_v1';
+const PROGRESSION_KEY = 'aetherial_horizons_progression_v1';
+
+export interface PersistentProgressionState {
+  badEndingCompleted: boolean;
+  goodEndingCompleted: boolean;
+}
+
+export const SaveManager = {
+  getState(): PersistentProgressionState {
+    try {
+      const raw = localStorage.getItem(PROGRESSION_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      const badFlag =
+        localStorage.getItem('badEndingCompleted') === 'true' ||
+        Boolean(parsed.badEndingCompleted);
+      const goodFlag =
+        localStorage.getItem('goodEndingCompleted') === 'true' ||
+        Boolean(parsed.goodEndingCompleted);
+      return {
+        badEndingCompleted: badFlag,
+        goodEndingCompleted: goodFlag,
+      };
+    } catch {
+      return {
+        badEndingCompleted: false,
+        goodEndingCompleted: false,
+      };
+    }
+  },
+
+  saveState(state: PersistentProgressionState): void {
+    try {
+      localStorage.setItem(PROGRESSION_KEY, JSON.stringify(state));
+      localStorage.setItem('badEndingCompleted', String(state.badEndingCompleted));
+      localStorage.setItem('goodEndingCompleted', String(state.goodEndingCompleted));
+    } catch {}
+  },
+
+  setBadEndingCompleted(completed = true): PersistentProgressionState {
+    const current = this.getState();
+    const next: PersistentProgressionState = {
+      ...current,
+      badEndingCompleted: completed,
+    };
+    this.saveState(next);
+    return next;
+  },
+
+  setGoodEndingCompleted(completed = true): PersistentProgressionState {
+    const current = this.getState();
+    const next: PersistentProgressionState = {
+      ...current,
+      goodEndingCompleted: completed,
+    };
+    this.saveState(next);
+    return next;
+  },
+
+  isBadEndingCompleted(): boolean {
+    return this.getState().badEndingCompleted;
+  },
+
+  isGoodEndingCompleted(): boolean {
+    return this.getState().goodEndingCompleted;
+  },
+
+  resetAllSaves(): PersistentProgressionState {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(PROGRESSION_KEY);
+      localStorage.removeItem('badEndingCompleted');
+      localStorage.removeItem('goodEndingCompleted');
+    } catch {}
+    [1, 2, 3].forEach((slotId) => {
+      deleteSaveSlot(slotId);
+    });
+    return {
+      badEndingCompleted: false,
+      goodEndingCompleted: false,
+    };
+  },
+};
 
 export function getAllSaves(): Record<number, SaveSlotData | null> {
   try {

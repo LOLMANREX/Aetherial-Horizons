@@ -43,6 +43,11 @@ interface MainMenuProps {
   onToggleCamera: () => void;
   onReplayOutro?: () => void;
   onDebugJumpToEndingChoice?: () => void;
+  badEndingCompleted?: boolean;
+  goodEndingCompleted?: boolean;
+  onSimulateBadEndingCompleted?: () => void;
+  onTestDimensionalClash?: () => void;
+  onResetAllSaves?: () => void;
 }
 
 export const MainMenu: React.FC<MainMenuProps> = ({
@@ -64,6 +69,11 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   onToggleCamera,
   onReplayOutro,
   onDebugJumpToEndingChoice,
+  badEndingCompleted = false,
+  goodEndingCompleted = false,
+  onSimulateBadEndingCompleted,
+  onTestDimensionalClash,
+  onResetAllSaves,
 }) => {
   const [activeTab, setActiveTab] = useState<'MAIN' | 'SAVES' | 'CONTROLS'>('MAIN');
   const [savedToastSlot, setSavedToastSlot] = useState<number | null>(null);
@@ -71,6 +81,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   const [debugPinInput, setDebugPinInput] = useState('');
   const [isDebugUnlocked, setIsDebugUnlocked] = useState(false);
   const [debugPinError, setDebugPinError] = useState(false);
+  const [debugStatusMessage, setDebugStatusMessage] = useState<string | null>(null);
 
   const handleValidateDebugPin = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -86,7 +97,8 @@ export const MainMenu: React.FC<MainMenuProps> = ({
     screen === 'PLAYING' ||
     screen === 'INTRO_CUTSCENE' ||
     screen === 'BOSS_CUTSCENE' ||
-    screen === 'OUTRO_CUTSCENE'
+    screen === 'OUTRO_CUTSCENE' ||
+    screen === 'CLASH_CUTSCENE'
   ) {
     return null;
   }
@@ -611,22 +623,88 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                 </p>
               )}
 
-              {isDebugUnlocked && onDebugJumpToEndingChoice && (
-                <div className="pt-2 border-t border-slate-800/80 space-y-2">
-                  <p className="text-[11px] text-emerald-300">
-                    Code 1102 validé : équipement complet, 10/10 Orbes et boss vaincu seront initialisés.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsOptionsOpen(false);
-                      onDebugJumpToEndingChoice();
-                    }}
-                    className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-300 via-yellow-200 to-cyan-300 hover:from-amber-200 hover:to-cyan-200 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-amber-400/20 transition-all cursor-pointer"
-                  >
-                    <Sparkles className="w-4 h-4" />
-                    Sauter au Choix des Fins
-                  </button>
+              {isDebugUnlocked && (
+                <div className="pt-2 border-t border-slate-800/80 space-y-2.5">
+                  <div className="flex items-center justify-between text-[11px] bg-slate-900/90 px-3 py-2 rounded-xl border border-slate-800">
+                    <span className="text-slate-300">
+                      badEndingCompleted :{' '}
+                      <strong className={badEndingCompleted ? 'text-rose-400' : 'text-slate-500'}>
+                        {badEndingCompleted ? 'TRUE' : 'FALSE'}
+                      </strong>
+                    </span>
+                    <span className="text-slate-300">
+                      goodEndingCompleted :{' '}
+                      <strong className={goodEndingCompleted ? 'text-amber-300' : 'text-slate-500'}>
+                        {goodEndingCompleted ? 'TRUE' : 'FALSE'}
+                      </strong>
+                    </span>
+                  </div>
+
+                  {debugStatusMessage && (
+                    <p className="text-[11px] text-cyan-300 font-semibold">
+                      {debugStatusMessage}
+                    </p>
+                  )}
+
+                  {onDebugJumpToEndingChoice && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOptionsOpen(false);
+                        onDebugJumpToEndingChoice();
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-300 via-yellow-200 to-cyan-300 hover:from-amber-200 hover:to-cyan-200 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-amber-400/20 transition-all cursor-pointer"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      Sauter au Choix des Fins
+                    </button>
+                  )}
+
+                  {onSimulateBadEndingCompleted && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSimulateBadEndingCompleted();
+                        setDebugStatusMessage(
+                          'Flag badEndingCompleted forcé à TRUE dans localStorage !'
+                        );
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <Flame className="w-4 h-4" />
+                      Simuler sauvegarde : Mauvaise Fin déjà validée
+                    </button>
+                  )}
+
+                  {onTestDimensionalClash && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOptionsOpen(false);
+                        onTestDimensionalClash();
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-rose-500 via-purple-500 to-amber-400 hover:from-rose-400 hover:to-amber-300 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-purple-500/25 transition-all cursor-pointer"
+                    >
+                      <Film className="w-4 h-4" />
+                      Tester cinématique Clash Dimensionnel
+                    </button>
+                  )}
+
+                  {onResetAllSaves && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onResetAllSaves();
+                        setDebugStatusMessage(
+                          'Toutes les sauvegardes et flags de fins ont été réinitialisés.'
+                        );
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-rose-950/60 text-slate-300 hover:text-rose-300 border border-slate-700 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Reset toutes les sauvegardes
+                    </button>
+                  )}
                 </div>
               )}
             </div>

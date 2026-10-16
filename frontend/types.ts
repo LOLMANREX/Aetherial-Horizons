@@ -120,4 +120,5 @@ export type GameScreen =
   | 'PAUSED'
   | 'BOSS_CUTSCENE'
   | 'OUTRO_CUTSCENE'
+  | 'CLASH_CUTSCENE'
   | 'VICTORY';

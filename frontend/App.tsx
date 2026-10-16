@@ -7,6 +7,7 @@ import {
   INTRO_SLIDES,
   BOSS_SLIDES,
   OUTRO_SLIDES,
+  CLASH_SLIDES,
 } from './components/CutsceneOverlay';
 import {
   getTerrainHeight,
@@ -18,6 +19,7 @@ import {
 import {
   createHumanoidCharacter,
   createFirstPersonViewModel,
+  HumanoidCharacter,
 } from './utils/playerModel';
 import {
   createEnemyMesh,
@@ -52,6 +54,7 @@ import {
   saveToSlot,
   deleteSaveSlot,
   syncSavesFromCloud,
+  SaveManager,
 } from './utils/saveManager';
 import { soundFX } from './utils/sound';
 import { renderMinimapFrame } from './utils/minimapBridge';
@@ -181,6 +184,9 @@ export function App() {
   const [cutsceneStep, setCutsceneStep] = useState(0);
   const [cutsceneProgress, setCutsceneProgress] = useState(0);
   const [endingChoice, setEndingChoice] = useState<EndingChoice>('NONE');
+  const [progressionState, setProgressionState] = useState(() =>
+    SaveManager.getState()
+  );
 
   const [playerStats, setPlayerStats] = useState<PlayerStats>({
     x: 0,
@@ -262,6 +268,8 @@ export function App() {
     arrowRegenTimer: 0,
     divineInvulnTimer: 0,
     endingChoice: 'NONE' as EndingChoice,
+    isDimensionalClashActive: false,
+    alterEgoHumanoid: null as HumanoidCharacter | null,
     visualEffects: [] as VisualEffect3D[],
     exhaustedCooldown: false,
     wasSwimming: false,
@@ -644,6 +652,150 @@ export function App() {
     updateScreen('OUTRO_CUTSCENE');
   }, [exitLockSafe, performSave, syncOrbMeshesWithState, updateScreen]);
 
+  const triggerDimensionalClashCutscene = useCallback(() => {
+    const st = gameRef.current;
+    exitLockSafe();
+
+    const completedOrbs = (
+      st.orbs.length > 0 ? st.orbs : generateInitialOrbs(st.activeSlot * 137)
+    ).map((o) => ({
+      ...o,
+      collected: true,
+    }));
+
+    const centerGroundY = getTerrainHeight(0, 0);
+    st.orbs = completedOrbs;
+    st.playerPos.set(0, centerGroundY + 2.0, 14);
+    st.playerVel.set(0, 0, 0);
+    st.yaw = 0;
+    st.pitch = 0.05;
+    st.health = 100;
+    st.stamina = 100;
+    st.oxygen = 100;
+    st.arrows = 20;
+    st.equippedWeapon = 'SWORD';
+    st.isDrawingBow = false;
+    st.bowDrawProgress = 0;
+    st.dashCooldownTimer = 0;
+    st.novaCooldownTimer = 0;
+    st.divineInvulnTimer = 0;
+    st.endingChoice = 'SAVE_WORLD';
+    st.isDimensionalClashActive = true;
+    st.timeOfDay = 15.0;
+    st.keys = {};
+    st.cutsceneStepTimer = 0;
+    st.cutsceneStepIndex = 0;
+
+    if (st.bossInstance) {
+      st.bossInstance.active = false;
+      st.bossInstance.defeated = false;
+      st.bossInstance.maxHp = 2400;
+      st.bossInstance.hp = 2400;
+      st.bossInstance.group.visible = false;
+    }
+    if (st.fallingReceptacleMesh) {
+      st.fallingReceptacleMesh.visible = false;
+    }
+    if (st.sovereignThrone) {
+      st.sovereignThrone.group.visible = true;
+      st.sovereignThrone.group.position.set(0, centerGroundY, 0);
+    }
+    if (st.purificationWaveMesh) {
+      st.purificationWaveMesh.visible = true;
+      st.purificationWaveMesh.position.set(0, centerGroundY + 1.5, 0);
+      st.purificationWaveMesh.scale.set(1, 1, 1);
+      (st.purificationWaveMesh.material as THREE.MeshBasicMaterial).color.setHex(0xc084fc);
+    }
+    if (st.finaleMonumentGroup) {
+      st.finaleMonumentGroup.visible = true;
+    }
+    if (st.skyPillarMesh) {
+      (st.skyPillarMesh.material as THREE.MeshBasicMaterial).color.setHex(0xe11d48);
+    }
+    if (st.restoredHeartMesh) {
+      st.restoredHeartMesh.visible = true;
+      (st.restoredHeartMesh.material as THREE.MeshBasicMaterial).color.setHex(0xfde047);
+    }
+    if (st.alterEgoHumanoid) {
+      st.alterEgoHumanoid.group.visible = true;
+      st.alterEgoHumanoid.group.position.set(0, centerGroundY + 1.2, 0);
+      st.alterEgoHumanoid.group.rotation.set(0, Math.PI, 0);
+    }
+
+    st.enemyInstances.forEach((enemy) => {
+      enemy.group.visible = false;
+      enemy.alive = false;
+    });
+
+    syncOrbMeshesWithState(completedOrbs);
+    setEndingChoice('SAVE_WORLD');
+    setCutsceneStep(0);
+    setCutsceneProgress(0);
+
+    setPlayerStats((prev) => ({
+      ...prev,
+      health: 100,
+      maxHealth: 100,
+      stamina: 100,
+      oxygen: 100,
+      arrows: 20,
+      maxArrows: 20,
+      equippedWeapon: 'SWORD',
+      activePowers: completedOrbs.length,
+      endingChoice: 'SAVE_WORLD',
+    }));
+
+    setWorldState((prev) => ({
+      ...prev,
+      orbsCollected: completedOrbs.length,
+      totalOrbs: completedOrbs.length,
+      enemyTier: 1 + completedOrbs.length,
+      nearestOrbDistance: null,
+      nearestOrbAngle: null,
+      orbs: completedOrbs,
+      boss: {
+        ...prev.boss,
+        name: 'Souverain du Néant (Alter Ego)',
+        active: false,
+        defeated: false,
+        hp: 2400,
+        maxHp: 2400,
+      },
+    }));
+
+    soundFX.init();
+    soundFX.playNovaBlast();
+    soundFX.playBossRoar();
+    soundFX.playCinematicChord(0, true);
+    updateScreen('CLASH_CUTSCENE');
+  }, [exitLockSafe, syncOrbMeshesWithState, updateScreen]);
+
+  const handleSimulateBadEndingCompleted = useCallback(() => {
+    const nextState = SaveManager.setBadEndingCompleted(true);
+    setProgressionState(nextState);
+    showToast('DEBUG : Sauvegarde Mauvaise Fin validée (badEndingCompleted = true)');
+  }, [showToast]);
+
+  const handleTestDimensionalClash = useCallback(() => {
+    const nextState = SaveManager.setBadEndingCompleted(true);
+    setProgressionState(nextState);
+    triggerDimensionalClashCutscene();
+  }, [triggerDimensionalClashCutscene]);
+
+  const handleResetAllSaves = useCallback(() => {
+    const resetProgression = SaveManager.resetAllSaves();
+    setProgressionState(resetProgression);
+    for (let i = 1; i <= 3; i++) {
+      deleteSaveSlot(i);
+    }
+    setSaves(getAllSaves());
+    gameRef.current.isDimensionalClashActive = false;
+    if (gameRef.current.alterEgoHumanoid) {
+      gameRef.current.alterEgoHumanoid.group.visible = false;
+    }
+    showToast('DEBUG : Toutes les sauvegardes et flags multiversels ont été réinitialisés.');
+  }, [showToast]);
+
   const handleSelectEndingChoice = useCallback(
     (choice: 'SAVE_WORLD' | 'RULE_WORLD') => {
       const st = gameRef.current;
@@ -653,6 +805,16 @@ export function App() {
       const centerGroundY = getTerrainHeight(0, 0);
 
       if (choice === 'SAVE_WORLD') {
+        const updatedProgression = SaveManager.setGoodEndingCompleted(true);
+        setProgressionState(updatedProgression);
+
+        if (SaveManager.isBadEndingCompleted()) {
+          performSave(st.activeSlot);
+          triggerDimensionalClashCutscene();
+          return;
+        }
+
+        st.isDimensionalClashActive = false;
         st.timeOfDay = 11.2;
         soundFX.playNovaBlast();
         soundFX.playTimeShift();
@@ -696,6 +858,9 @@ export function App() {
           (st.purificationWaveMesh.material as THREE.MeshBasicMaterial).color.setHex(0xfde047);
         }
       } else {
+        const updatedProgression = SaveManager.setBadEndingCompleted(true);
+        setProgressionState(updatedProgression);
+        st.isDimensionalClashActive = false;
         st.timeOfDay = 18.6;
         soundFX.playBossRoar();
         soundFX.playLightningDash();
@@ -743,7 +908,7 @@ export function App() {
       soundFX.playCinematicChord(2, true);
       performSave(st.activeSlot);
     },
-    [performSave]
+    [performSave, triggerDimensionalClashCutscene]
   );
 
   const handleStartNewGame = useCallback(
@@ -768,6 +933,7 @@ export function App() {
       gameRef.current.novaCooldownTimer = 0;
       gameRef.current.divineInvulnTimer = 0;
       gameRef.current.endingChoice = 'NONE';
+      gameRef.current.isDimensionalClashActive = false;
       gameRef.current.timeOfDay = 8.5;
       gameRef.current.keys = {};
       gameRef.current.cutsceneStepTimer = 0;
@@ -785,10 +951,14 @@ export function App() {
       if (gameRef.current.fallingReceptacleMesh) {
         gameRef.current.fallingReceptacleMesh.visible = false;
       }
+      if (gameRef.current.alterEgoHumanoid) {
+        gameRef.current.alterEgoHumanoid.group.visible = false;
+      }
       if (gameRef.current.bossInstance) {
         gameRef.current.bossInstance.active = false;
         gameRef.current.bossInstance.defeated = false;
-        gameRef.current.bossInstance.hp = gameRef.current.bossInstance.maxHp;
+        gameRef.current.bossInstance.maxHp = 1200;
+        gameRef.current.bossInstance.hp = 1200;
         gameRef.current.bossInstance.group.visible = false;
       }
 
@@ -810,9 +980,11 @@ export function App() {
         orbs: freshOrbs,
         boss: {
           ...prev.boss,
+          name: 'Malakor, Titan du Néant',
           active: false,
           defeated: false,
           hp: 1200,
+          maxHp: 1200,
         },
       }));
 
@@ -870,6 +1042,53 @@ export function App() {
       showToast('COMBAT DE BOSS : Terrassez Malakor pour récupérer le Réceptacle !');
       updateScreen('PLAYING');
       requestLockSafe();
+    } else if (currentScreen === 'CLASH_CUTSCENE') {
+      if (st.purificationWaveMesh) {
+        st.purificationWaveMesh.visible = false;
+      }
+      if (st.sovereignThrone) {
+        st.sovereignThrone.group.visible = true;
+      }
+      if (st.finaleMonumentGroup) {
+        st.finaleMonumentGroup.visible = true;
+      }
+
+      respawnEnemiesAndLoot();
+
+      const fightStartZ = 24;
+      const fightStartY = getTerrainHeight(0, fightStartZ) + 2.0;
+      st.playerPos.set(0, fightStartY, fightStartZ);
+      st.playerVel.set(0, 0, 0);
+      st.yaw = 0;
+      st.pitch = 0.05;
+      st.health = 100;
+      st.stamina = 100;
+      st.oxygen = 100;
+      st.dashCooldownTimer = 0;
+      st.novaCooldownTimer = 0;
+      st.isDimensionalClashActive = true;
+
+      if (st.bossInstance) {
+        const cY = getTerrainHeight(0, 0);
+        st.bossInstance.active = true;
+        st.bossInstance.defeated = false;
+        st.bossInstance.maxHp = 2400;
+        st.bossInstance.hp = 2400;
+        st.bossInstance.position.set(0, cY, 0);
+        st.bossInstance.group.position.set(0, cY, 0);
+        st.bossInstance.group.visible = false;
+      }
+
+      if (st.alterEgoHumanoid) {
+        const cY = getTerrainHeight(0, 0);
+        st.alterEgoHumanoid.group.visible = true;
+        st.alterEgoHumanoid.group.position.set(0, cY, 0);
+      }
+
+      performSave(st.activeSlot);
+      showToast('COLLISION MULTIVERSELLE : Affrontez votre Alter Ego du Néant !');
+      updateScreen('PLAYING');
+      requestLockSafe();
     } else if (currentScreen === 'OUTRO_CUTSCENE') {
       if (st.purificationWaveMesh) {
         st.purificationWaveMesh.visible = false;
@@ -889,6 +1108,8 @@ export function App() {
       st.novaCooldownTimer = 0;
 
       if (st.endingChoice === 'RULE_WORLD') {
+        const updatedProgression = SaveManager.setBadEndingCompleted(true);
+        setProgressionState(updatedProgression);
         if (st.sovereignThrone) {
           st.sovereignThrone.group.visible = true;
         }
@@ -897,6 +1118,8 @@ export function App() {
         updateScreen('PLAYING');
         requestLockSafe();
       } else {
+        const updatedProgression = SaveManager.setGoodEndingCompleted(true);
+        setProgressionState(updatedProgression);
         st.pitch = 0.15;
         exitLockSafe();
         updateScreen('VICTORY');
@@ -911,6 +1134,8 @@ export function App() {
         ? INTRO_SLIDES
         : scr === 'BOSS_CUTSCENE'
         ? BOSS_SLIDES
+        : scr === 'CLASH_CUTSCENE'
+        ? CLASH_SLIDES
         : OUTRO_SLIDES;
     const nextIdx = gameRef.current.cutsceneStepIndex + 1;
 
@@ -929,10 +1154,10 @@ export function App() {
       gameRef.current.cutsceneStepTimer = 0;
       setCutsceneStep(nextIdx);
       setCutsceneProgress(0);
-      if (scr === 'BOSS_CUTSCENE' && nextIdx === 1) {
+      if ((scr === 'BOSS_CUTSCENE' || scr === 'CLASH_CUTSCENE') && nextIdx === 1) {
         soundFX.playBossRoar();
       } else {
-        soundFX.playCinematicChord(nextIdx, scr === 'OUTRO_CUTSCENE');
+        soundFX.playCinematicChord(nextIdx, scr === 'OUTRO_CUTSCENE' || scr === 'CLASH_CUTSCENE');
       }
     }
   }, [finishCutscene]);
@@ -1937,6 +2162,12 @@ export function App() {
     const playerGroup = humanoid.group;
     scene.add(playerGroup);
 
+    const alterEgo = createHumanoidCharacter();
+    alterEgo.group.scale.set(1.4, 1.4, 1.4);
+    alterEgo.group.visible = false;
+    scene.add(alterEgo.group);
+    gameRef.current.alterEgoHumanoid = alterEgo;
+
     // ============================================================================
     // 5. ORBES & MONUMENT DE CONVERGENCE FINALE
     // ============================================================================
@@ -2522,8 +2753,18 @@ export function App() {
         boss.active = false;
         boss.group.visible = false;
         soundFX.playEnemyHit(true);
-        showToast('MALAKOR TERRASSÉ ! Le Réceptacle des 10 Orbes est à vous !');
-        startOutroCutscene();
+        if (gameRef.current.isDimensionalClashActive) {
+          if (gameRef.current.alterEgoHumanoid) {
+            gameRef.current.alterEgoHumanoid.group.visible = false;
+          }
+          gameRef.current.isDimensionalClashActive = false;
+          showToast('ALTER EGO DU NÉANT VAINCU ! Le Multivers est réunifié !');
+          exitLockSafe();
+          updateScreen('VICTORY');
+        } else {
+          showToast('MALAKOR TERRASSÉ ! Le Réceptacle des 10 Orbes est à vous !');
+          startOutroCutscene();
+        }
       } else {
         soundFX.playEnemyHit(false);
       }
@@ -3189,6 +3430,115 @@ export function App() {
         return;
       }
 
+      if (state.screen === 'CLASH_CUTSCENE') {
+        playerGroup.visible = true;
+        fpViewModel.group.visible = false;
+        alterEgo.group.visible = true;
+
+        state.cutsceneStepTimer += dt;
+        const stepProgress = Math.min(
+          1,
+          state.cutsceneStepTimer / CUTSCENE_ANIM_DURATION
+        );
+        setCutsceneProgress(stepProgress);
+
+        if (state.cutsceneStepTimer >= CUTSCENE_ANIM_DURATION) {
+          handleNextCutsceneStep();
+        }
+
+        const spawnGroundY = getTerrainHeight(0, 0);
+
+        if (state.sovereignThrone) {
+          state.sovereignThrone.group.visible = true;
+          state.sovereignThrone.updateAbyssalEffects(now * 0.001, 1.0);
+        }
+
+        if (state.purificationWaveMesh) {
+          state.purificationWaveMesh.visible = true;
+          const riftScale = 1 + Math.sin(now * 0.004) * 0.35 + stepProgress * 6.5;
+          state.purificationWaveMesh.scale.set(riftScale, riftScale, 1);
+          (state.purificationWaveMesh.material as THREE.MeshBasicMaterial).opacity =
+            0.55 + Math.sin(now * 0.01) * 0.25;
+        }
+
+        playerGroup.position.set(0, spawnGroundY + 1.4 + Math.sin(now * 0.004) * 0.25, 9.5);
+        playerGroup.rotation.set(0, Math.PI, 0);
+
+        humanoid.updateAnimation({
+          dt,
+          time: now,
+          speed: 0,
+          forwardInput: 0,
+          rightInput: 0,
+          isSprinting: false,
+          isGrounded: false,
+          isSwimming: false,
+          headPitch: 0.1,
+          attackProgress: stepProgress > 0.65 ? (stepProgress - 0.65) / 0.35 : 0,
+          equippedWeapon: 'SWORD',
+          bowDrawProgress: 0,
+          bowReleaseTimer: 0,
+          hasArrows: true,
+          isSeatedOnThrone: false,
+          isCorrupted: false,
+          isCelestial: true,
+        });
+
+        const alterZ = -7.5 + stepProgress * 3.0;
+        alterEgo.group.position.set(
+          0,
+          spawnGroundY + 1.5 + Math.cos(now * 0.0045) * 0.3,
+          alterZ
+        );
+        alterEgo.group.rotation.set(0, 0, 0);
+
+        alterEgo.updateAnimation({
+          dt,
+          time: now,
+          speed: 0,
+          forwardInput: 0,
+          rightInput: 0,
+          isSprinting: false,
+          isGrounded: false,
+          isSwimming: false,
+          headPitch: -0.1,
+          attackProgress: stepProgress > 0.5 ? (stepProgress - 0.5) * 2.0 : 0,
+          equippedWeapon: 'SWORD',
+          bowDrawProgress: 0,
+          bowReleaseTimer: 0,
+          hasArrows: true,
+          isSeatedOnThrone: false,
+          isCorrupted: true,
+          isCelestial: false,
+        });
+
+        const shakeAmp = 0.28;
+        const shakeX = Math.sin(now * 0.043) * shakeAmp;
+        const shakeY = Math.cos(now * 0.051) * shakeAmp;
+
+        if (state.cutsceneStepIndex === 0) {
+          const angle = stepProgress * 1.2 - 0.6;
+          camera.position.set(
+            Math.sin(angle) * 18 + shakeX,
+            spawnGroundY + 6.5 + stepProgress * 4.0 + shakeY,
+            Math.cos(angle) * 18
+          );
+          camera.lookAt(0, spawnGroundY + 3.2, 1.0);
+        } else {
+          const orbitAngle = Math.PI * 0.5 + (stepProgress - 0.5) * 0.9;
+          const radius = 14.5 - stepProgress * 2.5;
+          camera.position.set(
+            Math.sin(orbitAngle) * radius + shakeX,
+            spawnGroundY + 4.2 + Math.sin(stepProgress * Math.PI) * 2.5 + shakeY,
+            Math.cos(orbitAngle) * radius + 1.0
+          );
+          camera.lookAt(0, spawnGroundY + 2.6, 1.0);
+        }
+
+        renderer.render(scene, camera);
+        return;
+      }
+
       // --- E. GAMEPLAY ACTIF (PLAYING) ---
       if (state.screen === 'PLAYING') {
         const orbsCollectedCount = state.orbs.filter((o) => o.collected).length;
@@ -3797,6 +4147,37 @@ export function App() {
           boss.group.rotation.y = boss.yaw;
 
           const bSpd = Math.hypot(boss.velocity.x, boss.velocity.z);
+          if (state.isDimensionalClashActive) {
+            boss.group.visible = false;
+            alterEgo.group.visible = true;
+            alterEgo.group.position.copy(boss.position);
+            alterEgo.group.rotation.y = boss.yaw + Math.PI;
+            alterEgo.updateAnimation({
+              dt,
+              time: now,
+              speed: bSpd,
+              forwardInput: bSpd > 0.5 ? 1 : 0,
+              rightInput: 0,
+              isSprinting: bSpd > 3.5,
+              isGrounded: true,
+              isSwimming: false,
+              headPitch: 0,
+              attackProgress:
+                boss.attackAnimTimer > 0
+                  ? 1 - boss.attackAnimTimer / 0.55
+                  : 0,
+              equippedWeapon: 'SWORD',
+              bowDrawProgress: 0,
+              bowReleaseTimer: 0,
+              hasArrows: true,
+              isSeatedOnThrone: false,
+              isCorrupted: true,
+              isCelestial: false,
+            });
+          } else {
+            alterEgo.group.visible = false;
+          }
+
           if (bSpd > 0.5) {
             boss.walkPhase += dt * bSpd * 0.65;
             boss.leftLeg.rotation.x = Math.sin(boss.walkPhase) * 0.55;
@@ -4225,7 +4606,9 @@ export function App() {
             boss: {
               active: boss?.active ?? false,
               defeated: boss?.defeated ?? false,
-              name: 'Malakor, Titan du Néant',
+              name: state.isDimensionalClashActive
+                ? 'Souverain du Néant (Alter Ego)'
+                : 'Malakor, Titan du Néant',
               x: boss?.position.x ?? 0,
               y: boss?.position.y ?? 0,
               z: boss?.position.z ?? 0,
@@ -4336,13 +4719,16 @@ export function App() {
 
       {(screen === 'INTRO_CUTSCENE' ||
         screen === 'BOSS_CUTSCENE' ||
-        screen === 'OUTRO_CUTSCENE') && (
+        screen === 'OUTRO_CUTSCENE' ||
+        screen === 'CLASH_CUTSCENE') && (
         <CutsceneOverlay
           mode={
             screen === 'INTRO_CUTSCENE'
               ? 'INTRO'
               : screen === 'BOSS_CUTSCENE'
               ? 'BOSS'
+              : screen === 'CLASH_CUTSCENE'
+              ? 'CLASH'
               : 'OUTRO'
           }
           stepIndex={cutsceneStep}
@@ -4376,6 +4762,8 @@ export function App() {
         orbsCollected={worldState.orbsCollected}
         totalOrbs={worldState.totalOrbs}
         endingChoice={endingChoice}
+        badEndingCompleted={progressionState.badEndingCompleted}
+        goodEndingCompleted={progressionState.goodEndingCompleted}
         onStartNewGame={handleStartNewGame}
         onLoadGame={handleLoadGame}
         onSaveCurrentGame={performSave}
@@ -4386,6 +4774,9 @@ export function App() {
         onToggleCamera={handleToggleCamera}
         onReplayOutro={startOutroCutscene}
         onDebugJumpToEndingChoice={handleDebugJumpToEndingChoice}
+        onSimulateBadEndingCompleted={handleSimulateBadEndingCompleted}
+        onTestDimensionalClash={handleTestDimensionalClash}
+        onResetAllSaves={handleResetAllSaves}
       />
     </div>
   );
