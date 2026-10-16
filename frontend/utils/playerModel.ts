@@ -15,12 +15,13 @@ export interface HumanoidCharacter {
     isSwimming: boolean;
     headPitch: number;
     equippedWeapon: WeaponType;
-    attackProgress: number; // 0 à 1 pendant un coup d'épée
-    bowDrawProgress: number; // 0 à 1 pendant qu'on bande l'arc
-    bowReleaseTimer: number; // > 0 juste après le lâcher de flèche
+    attackProgress: number;
+    bowDrawProgress: number;
+    bowReleaseTimer: number;
     hasArrows: boolean;
     isSeatedOnThrone?: boolean;
     isCorrupted?: boolean;
+    isCelestial?: boolean;
   }) => void;
 }
 
@@ -40,13 +41,14 @@ export interface FirstPersonViewModel {
     bowReleaseTimer: number;
     hasArrows: boolean;
     isCorrupted?: boolean;
+    isCelestial?: boolean;
   }) => void;
 }
 
 export function buildDetailedSwordMesh(): {
   swordRoot: THREE.Group;
   slashTrailMesh: THREE.Mesh;
-  setCorruptedMode: (corrupted: boolean) => void;
+  setCorruptedMode: (corrupted: boolean, celestial?: boolean, timeSec?: number) => void;
 } {
   const swordRoot = new THREE.Group();
 
@@ -125,7 +127,6 @@ export function buildDetailedSwordMesh(): {
   edgeGlow.position.set(0, 0.56, 0);
   swordRoot.add(edgeGlow);
 
-  // Ailettes démoniaques / obsidienne supplémentaires pour le skin Lame du Néant (Mauvaise Fin)
   const corruptedWingsGroup = new THREE.Group();
   corruptedWingsGroup.visible = false;
   for (const sign of [-1, 1]) {
@@ -137,7 +138,6 @@ export function buildDetailedSwordMesh(): {
     wing.rotation.z = -sign * 0.55;
     corruptedWingsGroup.add(wing);
 
-    // Fix missing space in `const tooth` variable declaration
     const tooth = new THREE.Mesh(
       new THREE.ConeGeometry(0.028, 0.18, 4),
       crystalMat
@@ -147,6 +147,47 @@ export function buildDetailedSwordMesh(): {
     corruptedWingsGroup.add(tooth);
   }
   swordRoot.add(corruptedWingsGroup);
+
+  const originHaloGroup = new THREE.Group();
+  originHaloGroup.visible = false;
+  const haloMat = new THREE.MeshBasicMaterial({
+    color: 0xfef08a,
+    transparent: true,
+    opacity: 0.9,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const astralShardMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+  });
+
+  const guardHalo = new THREE.Mesh(
+    new THREE.TorusGeometry(0.18, 0.012, 8, 24),
+    haloMat
+  );
+  guardHalo.position.set(0, 0.22, 0);
+  originHaloGroup.add(guardHalo);
+
+  const bladeDistortionRing = new THREE.Mesh(
+    new THREE.TorusGeometry(0.11, 0.008, 6, 20),
+    haloMat
+  );
+  bladeDistortionRing.position.set(0, 0.68, 0);
+  bladeDistortionRing.rotation.x = Math.PI / 2;
+  originHaloGroup.add(bladeDistortionRing);
+
+  for (const sign of [-1, 1]) {
+    const celestialWing = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.055, 0),
+      astralShardMat
+    );
+    celestialWing.scale.set(0.45, 2.4, 0.45);
+    celestialWing.position.set(sign * 0.16, 0.2, 0);
+    celestialWing.rotation.z = -sign * 0.45;
+    originHaloGroup.add(celestialWing);
+  }
+  swordRoot.add(originHaloGroup);
 
   const slashTrailMat = new THREE.MeshBasicMaterial({
     color: 0x38bdf8,
@@ -166,22 +207,48 @@ export function buildDetailedSwordMesh(): {
   swordRoot.add(slashTrailMesh);
 
   let currentCorruptedState = false;
-  const setCorruptedMode = (corrupted: boolean) => {
-    if (currentCorruptedState === corrupted) return;
+  let currentCelestialState = false;
+  const setCorruptedMode = (corrupted: boolean, celestial = false, timeSec = 0) => {
+    if (celestial) {
+      guardHalo.rotation.z = timeSec * 2.5;
+      bladeDistortionRing.rotation.z = -timeSec * 3.2;
+      bladeDistortionRing.position.y = 0.58 + Math.sin(timeSec * 4.0) * 0.22;
+    }
+    if (currentCorruptedState === corrupted && currentCelestialState === celestial) return;
     currentCorruptedState = corrupted;
+    currentCelestialState = celestial;
     corruptedWingsGroup.visible = corrupted;
+    originHaloGroup.visible = celestial;
+
     if (corrupted) {
-      steelMat.color.setHex(0x0f071e); // Lame d'obsidienne noire
-      goldMat.color.setHex(0x881337); // Garde carmin sombre
-      crystalMat.color.setHex(0xf43f5e); // Cœur runique rouge sang
+      steelMat.color.setHex(0x0f071e);
+      steelMat.emissive.setHex(0x000000);
+      goldMat.color.setHex(0x881337);
+      goldMat.emissive.setHex(0x000000);
+      crystalMat.color.setHex(0xf43f5e);
       crystalMat.emissive.setHex(0xe11d48);
       slashTrailMat.color.setHex(0xf43f5e);
       blade.scale.set(1.35, 1.12, 1.2);
+    } else if (celestial) {
+      steelMat.color.setHex(0xffffff);
+      steelMat.emissive.setHex(0xfef08a);
+      steelMat.emissiveIntensity = 0.95;
+      goldMat.color.setHex(0xfde047);
+      goldMat.emissive.setHex(0xf59e0b);
+      goldMat.emissiveIntensity = 0.65;
+      crystalMat.color.setHex(0xffffff);
+      crystalMat.emissive.setHex(0x38bdf8);
+      crystalMat.emissiveIntensity = 2.4;
+      slashTrailMat.color.setHex(0xfef08a);
+      blade.scale.set(1.22, 1.16, 1.15);
     } else {
       steelMat.color.setHex(0xe2e8f0);
+      steelMat.emissive.setHex(0x000000);
       goldMat.color.setHex(0xfbbf24);
+      goldMat.emissive.setHex(0x000000);
       crystalMat.color.setHex(0x22d3ee);
       crystalMat.emissive.setHex(0x06b6d4);
+      crystalMat.emissiveIntensity = 1.8;
       slashTrailMat.color.setHex(0x38bdf8);
       blade.scale.set(1, 1, 1);
     }
@@ -195,7 +262,7 @@ export function buildDetailedBowMesh(): {
   upperString: THREE.Mesh;
   lowerString: THREE.Mesh;
   nockedArrow: THREE.Group;
-  setCorruptedMode: (corrupted: boolean) => void;
+  setCorruptedMode: (corrupted: boolean, celestial?: boolean, timeSec?: number) => void;
 } {
   const bowRoot = new THREE.Group();
 
@@ -261,6 +328,22 @@ export function buildDetailedBowMesh(): {
   lowerTip.position.set(0, -0.44, 0.18);
   bowRoot.add(lowerTip);
 
+  const stellarBowHaloGroup = new THREE.Group();
+  stellarBowHaloGroup.visible = false;
+  const stellarRing = new THREE.Mesh(
+    new THREE.TorusGeometry(0.22, 0.01, 8, 24),
+    new THREE.MeshBasicMaterial({
+      color: 0xfef08a,
+      transparent: true,
+      opacity: 0.85,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+  );
+  stellarRing.rotation.y = Math.PI / 2;
+  stellarBowHaloGroup.add(stellarRing);
+  bowRoot.add(stellarBowHaloGroup);
+
   const upperString = new THREE.Mesh(
     new THREE.CylinderGeometry(0.004, 0.004, 0.44, 4),
     stringMat
@@ -296,21 +379,45 @@ export function buildDetailedBowMesh(): {
   bowRoot.add(nockedArrow);
 
   let currentCorruptedState = false;
-  const setCorruptedMode = (corrupted: boolean) => {
-    if (currentCorruptedState === corrupted) return;
+  let currentCelestialState = false;
+  const setCorruptedMode = (corrupted: boolean, celestial = false, timeSec = 0) => {
+    if (celestial) {
+      stellarRing.rotation.z = timeSec * 2.4;
+    }
+    if (currentCorruptedState === corrupted && currentCelestialState === celestial) return;
     currentCorruptedState = corrupted;
+    currentCelestialState = celestial;
+    stellarBowHaloGroup.visible = celestial;
+
     if (corrupted) {
       woodMat.color.setHex(0x0f071e);
+      woodMat.emissive.setHex(0x000000);
       goldMat.color.setHex(0x9f1239);
+      goldMat.emissive.setHex(0x000000);
       crystalMat.color.setHex(0xf43f5e);
       crystalMat.emissive.setHex(0xe11d48);
       stringMat.color.setHex(0xf43f5e);
       shaftMat.color.setHex(0xf43f5e);
+    } else if (celestial) {
+      woodMat.color.setHex(0xffffff);
+      woodMat.emissive.setHex(0xfef08a);
+      woodMat.emissiveIntensity = 0.75;
+      goldMat.color.setHex(0xfde047);
+      goldMat.emissive.setHex(0xf59e0b);
+      goldMat.emissiveIntensity = 0.7;
+      crystalMat.color.setHex(0xffffff);
+      crystalMat.emissive.setHex(0x38bdf8);
+      crystalMat.emissiveIntensity = 2.2;
+      stringMat.color.setHex(0xfef08a);
+      shaftMat.color.setHex(0xffffff);
     } else {
       woodMat.color.setHex(0x5c361a);
+      woodMat.emissive.setHex(0x000000);
       goldMat.color.setHex(0xfbbf24);
+      goldMat.emissive.setHex(0x000000);
       crystalMat.color.setHex(0x22d3ee);
       crystalMat.emissive.setHex(0x06b6d4);
+      crystalMat.emissiveIntensity = 1.6;
       stringMat.color.setHex(0xe2e8f0);
       shaftMat.color.setHex(0xfde047);
     }
@@ -678,7 +785,48 @@ export function createHumanoidCharacter(): HumanoidCharacter {
   bodyPivot.add(leftLegPivot);
   bodyPivot.add(rightLegPivot);
 
-  // 5. ANIMATION 3ÈME PERSONNE
+  const celestialHaloGroup = new THREE.Group();
+  celestialHaloGroup.position.set(0, 0.52, 0.14);
+  celestialHaloGroup.visible = false;
+
+  const celestialGlowMat = new THREE.MeshBasicMaterial({
+    color: 0xfef08a,
+    transparent: true,
+    opacity: 0.9,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+
+  const celestialWhiteMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+  });
+
+  const backHaloRing = new THREE.Mesh(
+    new THREE.TorusGeometry(0.46, 0.022, 8, 28),
+    celestialGlowMat
+  );
+  celestialHaloGroup.add(backHaloRing);
+
+  const innerHaloRing = new THREE.Mesh(
+    new THREE.TorusGeometry(0.32, 0.014, 8, 24),
+    celestialWhiteMat
+  );
+  celestialHaloGroup.add(innerHaloRing);
+
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const starRay = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.055, 0),
+      i % 2 === 0 ? celestialWhiteMat : celestialGlowMat
+    );
+    starRay.scale.set(0.5, 2.2, 0.5);
+    starRay.position.set(Math.cos(a) * 0.54, Math.sin(a) * 0.54, 0);
+    starRay.rotation.z = a - Math.PI / 2;
+    celestialHaloGroup.add(starRay);
+  }
+  torsoPivot.add(celestialHaloGroup);
+
   let walkCycle = 0;
 
   const updateAnimation = ({
@@ -698,6 +846,7 @@ export function createHumanoidCharacter(): HumanoidCharacter {
     hasArrows,
     isSeatedOnThrone = false,
     isCorrupted = false,
+    isCelestial = false,
   }: {
     dt: number;
     time: number;
@@ -715,24 +864,65 @@ export function createHumanoidCharacter(): HumanoidCharacter {
     hasArrows: boolean;
     isSeatedOnThrone?: boolean;
     isCorrupted?: boolean;
+    isCelestial?: boolean;
   }) => {
     const tSec = time * 0.001;
 
-    setSwordCorrupted(isCorrupted);
-    setBowCorrupted(isCorrupted);
-    if (isCorrupted) {
+    setSwordCorrupted(isCorrupted, isCelestial, tSec);
+    setBowCorrupted(isCorrupted, isCelestial, tSec);
+    celestialHaloGroup.visible = isCelestial;
+
+    if (isCelestial) {
+      backHaloRing.rotation.z = tSec * 1.4;
+      innerHaloRing.rotation.z = -tSec * 2.2;
+      tunicMat.color.setHex(0xffffff);
+      tunicMat.emissive.setHex(0xfef08a);
+      tunicMat.emissiveIntensity = 0.65;
+      armorTrimMat.color.setHex(0xfde047);
+      armorTrimMat.emissive.setHex(0xf59e0b);
+      armorTrimMat.emissiveIntensity = 0.75;
+      scarfMat.color.setHex(0xfef08a);
+      scarfMat.emissive.setHex(0xfbbf24);
+      scarfMat.emissiveIntensity = 0.55;
+      pantsMat.color.setHex(0xf8fafc);
+      pantsMat.emissive.setHex(0xe2e8f0);
+      pantsMat.emissiveIntensity = 0.25;
+      hairMat.color.setHex(0xffffff);
+      hairMat.emissive.setHex(0xfef08a);
+      hairMat.emissiveIntensity = 0.8;
+      crystalMat.color.setHex(0xffffff);
+      crystalMat.emissive.setHex(0x38bdf8);
+      crystalMat.emissiveIntensity = 2.4;
+    } else if (isCorrupted) {
       tunicMat.color.setHex(0x181028);
+      tunicMat.emissive.setHex(0x000000);
       armorTrimMat.color.setHex(0xe11d48);
+      armorTrimMat.emissive.setHex(0x000000);
+      scarfMat.color.setHex(0xe11d48);
+      scarfMat.emissive.setHex(0x000000);
+      pantsMat.color.setHex(0x1e293b);
+      pantsMat.emissive.setHex(0x000000);
+      hairMat.color.setHex(0x271c19);
+      hairMat.emissive.setHex(0x000000);
       crystalMat.color.setHex(0xf43f5e);
       crystalMat.emissive.setHex(0xe11d48);
+      crystalMat.emissiveIntensity = 1.8;
     } else {
       tunicMat.color.setHex(0x0f4c81);
+      tunicMat.emissive.setHex(0x000000);
       armorTrimMat.color.setHex(0x38bdf8);
+      armorTrimMat.emissive.setHex(0x000000);
+      scarfMat.color.setHex(0xe11d48);
+      scarfMat.emissive.setHex(0x000000);
+      pantsMat.color.setHex(0x1e293b);
+      pantsMat.emissive.setHex(0x000000);
+      hairMat.color.setHex(0x271c19);
+      hairMat.emissive.setHex(0x000000);
       crystalMat.color.setHex(0x22d3ee);
       crystalMat.emissive.setHex(0x06b6d4);
+      crystalMat.emissiveIntensity = 1.8;
     }
 
-    // --- POSTURE ROYALE SUR LE TRÔNE (FIN DE DOMINATION : CONTRÔLER LE MONDE) ---
     if (isSeatedOnThrone) {
       swordGroup.visible = true;
       bowGroup.visible = false;
@@ -986,7 +1176,6 @@ export function createHumanoidCharacter(): HumanoidCharacter {
       }
     }
 
-    // --- SURCOUCHE D'ANIMATION DE COMBAT 3ÈME PERSONNE ---
     if (equippedWeapon === 'SWORD' && attackProgress > 0) {
       const swingCurve = Math.sin(attackProgress * Math.PI);
       const slashRotX =
@@ -1012,7 +1201,7 @@ export function createHumanoidCharacter(): HumanoidCharacter {
         leftArmPivot.rotation.z = 0.22;
         torsoPivot.rotation.y = 0.28 * bowDrawProgress;
 
-        tpNockedArrow.visible = (hasArrows || isCorrupted) && bowReleaseTimer <= 0;
+        tpNockedArrow.visible = (hasArrows || isCorrupted || isCelestial) && bowReleaseTimer <= 0;
         tpNockedArrow.position.set(0, 0, pullBackZ);
         tpUpperString.position.set(0, 0.22, 0.18 + pullBackZ * 0.5);
         tpUpperString.rotation.x = -pullBackZ * 1.85;
@@ -1020,7 +1209,7 @@ export function createHumanoidCharacter(): HumanoidCharacter {
         tpLowerString.rotation.x = pullBackZ * 1.85;
       } else {
         bowGroup.rotation.x = -Math.PI / 2 + 0.2;
-        tpNockedArrow.visible = hasArrows || isCorrupted;
+        tpNockedArrow.visible = hasArrows || isCorrupted || isCelestial;
         tpNockedArrow.position.set(0, 0, 0);
         tpUpperString.position.set(0, 0.22, 0.18);
         tpUpperString.rotation.x = 0;
@@ -1037,9 +1226,6 @@ export function createHumanoidCharacter(): HumanoidCharacter {
   };
 }
 
-/**
- * Construit le Viewmodel 1ère personne
- */
 export function createFirstPersonViewModel(): FirstPersonViewModel {
   const fpRoot = new THREE.Group();
 
@@ -1059,7 +1245,6 @@ export function createFirstPersonViewModel(): FirstPersonViewModel {
     flatShading: true,
   });
 
-  // 1. GROUPE ÉPÉE 1ÈRE PERSONNE
   const fpSwordHolder = new THREE.Group();
   fpSwordHolder.position.set(0.38, -0.34, -0.52);
   fpRoot.add(fpSwordHolder);
@@ -1095,7 +1280,6 @@ export function createFirstPersonViewModel(): FirstPersonViewModel {
   fpSword.rotation.set(-0.35, -0.25, 0.12);
   fpSwordHolder.add(fpSword);
 
-  // 2. GROUPE ARC / CATALYSEUR D'ÉCLAIRS 1ÈRE PERSONNE
   const fpBowHolder = new THREE.Group();
   fpBowHolder.position.set(0.34, -0.24, -0.54);
   fpRoot.add(fpBowHolder);
@@ -1134,6 +1318,7 @@ export function createFirstPersonViewModel(): FirstPersonViewModel {
 
   const updateAnimation = ({
     dt,
+    time,
     isSprinting,
     isSwimming,
     equippedWeapon,
@@ -1142,6 +1327,7 @@ export function createFirstPersonViewModel(): FirstPersonViewModel {
     bowReleaseTimer,
     hasArrows,
     isCorrupted = false,
+    isCelestial = false,
   }: {
     dt: number;
     time: number;
@@ -1155,9 +1341,23 @@ export function createFirstPersonViewModel(): FirstPersonViewModel {
     bowReleaseTimer: number;
     hasArrows: boolean;
     isCorrupted?: boolean;
+    isCelestial?: boolean;
   }) => {
-    setFpSwordCorrupted(isCorrupted);
-    setFpBowCorrupted(isCorrupted);
+    const tSec = time * 0.001;
+    setFpSwordCorrupted(isCorrupted, isCelestial, tSec);
+    setFpBowCorrupted(isCorrupted, isCelestial, tSec);
+
+    if (isCelestial) {
+      sleeveMat.color.setHex(0xffffff);
+      sleeveMat.emissive.setHex(0xfef08a);
+      sleeveMat.emissiveIntensity = 0.65;
+    } else if (isCorrupted) {
+      sleeveMat.color.setHex(0x181028);
+      sleeveMat.emissive.setHex(0x000000);
+    } else {
+      sleeveMat.color.setHex(0x0f4c81);
+      sleeveMat.emissive.setHex(0x000000);
+    }
 
     if (isSwimming) {
       fpSwordHolder.visible = false;
@@ -1244,7 +1444,7 @@ export function createFirstPersonViewModel(): FirstPersonViewModel {
           0.08 * (1 - bowDrawProgress)
         );
 
-        fpNockedArrow.visible = (hasArrows || isCorrupted) && bowReleaseTimer <= 0;
+        fpNockedArrow.visible = (hasArrows || isCorrupted || isCelestial) && bowReleaseTimer <= 0;
         fpNockedArrow.position.set(0, 0, pullBackZ);
 
         drawHandGroup.visible = bowReleaseTimer <= 0;
@@ -1265,7 +1465,7 @@ export function createFirstPersonViewModel(): FirstPersonViewModel {
         fpBow.rotation.y = -0.22;
         fpBow.rotation.z = 0.18;
 
-        fpNockedArrow.visible = hasArrows || isCorrupted;
+        fpNockedArrow.visible = hasArrows || isCorrupted || isCelestial;
         fpNockedArrow.position.set(0, 0, 0);
         drawHandGroup.visible = false;
 

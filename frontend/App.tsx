@@ -25,6 +25,7 @@ import {
   createLootPickupMesh,
   createArrowProjectileMesh,
   createLightningBoltProjectileMesh,
+  createCometArrowProjectileMesh,
   createSkyVortexStrikeEffect,
   createRealityRiftEffect,
   createBossMesh,
@@ -1971,22 +1972,26 @@ export function App() {
     const fireChargedBowArrow = (charge: number) => {
       const st = gameRef.current;
       const isCorrupted = st.endingChoice === 'RULE_WORLD';
+      const isTranscendent = st.endingChoice === 'SAVE_WORLD';
       st.isDrawingBow = false;
       st.bowDrawProgress = 0;
       st.bowAutoReleaseOnFull = false;
 
-      if (!isCorrupted && st.arrows <= 0) {
+      if (!isCorrupted && !isTranscendent && st.arrows <= 0) {
         return;
       }
 
-      if (!isCorrupted) {
+      if (!isCorrupted && !isTranscendent) {
         st.arrows -= 1;
       }
-      st.bowCooldownTimer = isCorrupted ? 0.22 : 0.38;
+      st.bowCooldownTimer = isCorrupted || isTranscendent ? 0.22 : 0.38;
       st.bowReleaseAnimTimer = 0.18;
 
       if (isCorrupted) {
         soundFX.playLightningDash();
+      } else if (isTranscendent) {
+        soundFX.playBowShoot();
+        soundFX.playOrbCollect(9);
       } else {
         soundFX.playBowShoot();
       }
@@ -2067,6 +2072,26 @@ export function App() {
         return;
       }
 
+      if (isTranscendent) {
+        const cometSpeed = 60;
+        const cometVel = dirToTarget.multiplyScalar(cometSpeed);
+        const cometMesh = createCometArrowProjectileMesh();
+        cometMesh.position.copy(spawnPos);
+        cometMesh.lookAt(spawnPos.clone().add(cometVel));
+        scene.add(cometMesh);
+
+        st.arrowProjectiles.push({
+          mesh: cometMesh,
+          position: spawnPos,
+          velocity: cometVel,
+          age: 0,
+          active: true,
+          isLightningBolt: false,
+          isCosmicArrow: true,
+        });
+        return;
+      }
+
       const arrowSpeed = 26 + charge * 12;
 
       const distToTarget = spawnPos.distanceTo(targetPoint);
@@ -2107,7 +2132,7 @@ export function App() {
         soundFX.playSwordSwing();
       } else if (st.equippedWeapon === 'BOW') {
         if (st.bowCooldownTimer > 0 || st.isDrawingBow) return;
-        if (st.endingChoice === 'RULE_WORLD') {
+        if (st.endingChoice === 'RULE_WORLD' || st.endingChoice === 'SAVE_WORLD') {
           fireChargedBowArrow(1.0);
           return;
         }
@@ -2569,6 +2594,7 @@ export function App() {
           hasArrows: state.arrows > 0,
           isSeatedOnThrone: false,
           isCorrupted: isCorruptedRuler,
+          isCelestial: isTranscendentSavior,
         });
 
         const menuAngle = now * 0.00015;
@@ -2928,6 +2954,7 @@ export function App() {
             hasArrows: true,
             isSeatedOnThrone: false,
             isCorrupted: false,
+            isCelestial: true,
           });
 
           if (stepIdx === 2) {
@@ -3409,9 +3436,10 @@ export function App() {
           attackProgress,
           bowDrawProgress: state.bowDrawProgress,
           bowReleaseTimer: state.bowReleaseAnimTimer,
-          hasArrows: state.arrows > 0,
+          hasArrows: state.arrows > 0 || isCorruptedRuler || isTranscendentSavior,
           isSeatedOnThrone: false,
           isCorrupted: isCorruptedRuler,
+          isCelestial: isTranscendentSavior,
         });
 
         fpViewModel.updateAnimation({
@@ -3425,11 +3453,11 @@ export function App() {
           attackProgress,
           bowDrawProgress: state.bowDrawProgress,
           bowReleaseTimer: state.bowReleaseAnimTimer,
-          hasArrows: state.arrows > 0,
+          hasArrows: state.arrows > 0 || isCorruptedRuler || isTranscendentSavior,
           isCorrupted: isCorruptedRuler,
+          isCelestial: isTranscendentSavior,
         });
 
-        // --- GESTION DE LA TENSION D'ARC ---
         if (state.bowCooldownTimer > 0) {
           state.bowCooldownTimer = Math.max(0, state.bowCooldownTimer - dt);
         }
@@ -3447,13 +3475,12 @@ export function App() {
           }
         }
 
-        // --- SIMULATION BALISTIQUE DES FLÈCHES & DES MINI-ÉCLAIRS ROUGES EN VOL ---
         for (let i = state.arrowProjectiles.length - 1; i >= 0; i--) {
           const arrow = state.arrowProjectiles[i];
           if (!arrow.active) continue;
 
           arrow.age += dt;
-          if (!arrow.isLightningBolt) {
+          if (!arrow.isLightningBolt && !arrow.isCosmicArrow) {
             arrow.velocity.y -= ARROW_GRAVITY * dt;
           }
 
@@ -3463,6 +3490,9 @@ export function App() {
 
           arrow.mesh.position.copy(nextPos);
           arrow.mesh.lookAt(nextPos.clone().add(arrow.velocity));
+          if (arrow.isCosmicArrow) {
+            arrow.mesh.rotateZ(arrow.age * 10);
+          }
           arrow.position.copy(nextPos);
 
           let hitSomething = false;
@@ -3501,7 +3531,7 @@ export function App() {
                 );
                 damageEnemy(
                   enemy,
-                  Math.round((arrow.isLightningBolt ? 75 : 55) * damageMultiplier),
+                  Math.round((arrow.isLightningBolt || arrow.isCosmicArrow ? 80 : 55) * damageMultiplier),
                   arrow.velocity.x / horizLen,
                   arrow.velocity.z / horizLen
                 );
