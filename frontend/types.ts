@@ -121,4 +121,5 @@ export type GameScreen =
   | 'BOSS_CUTSCENE'
   | 'OUTRO_CUTSCENE'
   | 'CLASH_CUTSCENE'
+  | 'GAME_OVER'
   | 'VICTORY';

@@ -796,6 +796,108 @@ export function App() {
     showToast('DEBUG : Toutes les sauvegardes et flags multiversels ont été réinitialisés.');
   }, [showToast]);
 
+  const triggerGameOver = useCallback(() => {
+    const st = gameRef.current;
+    if (st.screen === 'GAME_OVER') return;
+    st.health = 0;
+    st.keys = {};
+    st.isDrawingBow = false;
+    st.bowDrawProgress = 0;
+    st.attackTimer = 0;
+    st.playerVel.set(0, 0, 0);
+
+    setPlayerStats((prev) => ({
+      ...prev,
+      health: 0,
+      isAttacking: false,
+      isDrawingBow: false,
+      isSprinting: false,
+    }));
+
+    exitLockSafe();
+    soundFX.init();
+    soundFX.playPlayerHurt();
+    soundFX.playCinematicChord(0, true);
+    updateScreen('GAME_OVER');
+  }, [exitLockSafe, updateScreen]);
+
+  const handleRetryGameOver = useCallback(() => {
+    const st = gameRef.current;
+    st.health = 100;
+    st.stamina = 100;
+    st.oxygen = 100;
+    st.dashCooldownTimer = 0;
+    st.novaCooldownTimer = 0;
+    st.divineInvulnTimer = 1.8;
+    st.keys = {};
+    st.isDrawingBow = false;
+    st.bowDrawProgress = 0;
+    st.attackTimer = 0;
+    st.playerVel.set(0, 0, 0);
+
+    if (st.isDimensionalClashActive) {
+      const fightStartZ = 24;
+      st.playerPos.set(0, getTerrainHeight(0, fightStartZ) + 2.0, fightStartZ);
+      st.yaw = 0;
+      st.pitch = 0.05;
+      if (st.bossInstance) {
+        const cY = getTerrainHeight(0, 0);
+        st.bossInstance.active = true;
+        st.bossInstance.defeated = false;
+        st.bossInstance.maxHp = 2400;
+        st.bossInstance.hp = 2400;
+        st.bossInstance.position.set(0, cY, 0);
+        st.bossInstance.group.position.set(0, cY, 0);
+        st.bossInstance.group.visible = false;
+      }
+      if (st.alterEgoHumanoid) {
+        const cY = getTerrainHeight(0, 0);
+        st.alterEgoHumanoid.group.visible = true;
+        st.alterEgoHumanoid.group.position.set(0, cY, 0);
+      }
+    } else if (st.bossInstance && st.bossInstance.active && !st.bossInstance.defeated) {
+      const fightStartZ = 34;
+      st.playerPos.set(0, getTerrainHeight(0, fightStartZ) + 2.0, fightStartZ);
+      st.yaw = 0;
+      st.pitch = 0.05;
+      const cY = getTerrainHeight(0, 0);
+      st.bossInstance.hp = st.bossInstance.maxHp;
+      st.bossInstance.position.set(0, cY, 0);
+      st.bossInstance.group.position.set(0, cY, 0);
+      st.bossInstance.group.visible = true;
+    } else if (st.endingChoice !== 'NONE') {
+      const spawnZ = 18;
+      st.playerPos.set(0, getTerrainHeight(0, spawnZ) + 2.0, spawnZ);
+      st.yaw = 0;
+      st.pitch = 0.05;
+      respawnEnemiesAndLoot();
+    } else {
+      st.playerPos.set(0, getTerrainHeight(0, 0) + 2.0, 0);
+      st.yaw = 0;
+      st.pitch = -0.05;
+      respawnEnemiesAndLoot();
+    }
+
+    setPlayerStats((prev) => ({
+      ...prev,
+      health: 100,
+      stamina: 100,
+      oxygen: 100,
+      isAttacking: false,
+      isDrawingBow: false,
+      isSprinting: false,
+    }));
+
+    soundFX.init();
+    soundFX.playTimeShift();
+    updateScreen('PLAYING');
+    requestLockSafe();
+  }, [requestLockSafe, respawnEnemiesAndLoot, updateScreen]);
+
+  const handleForceGameOver = useCallback(() => {
+    triggerGameOver();
+  }, [triggerGameOver]);
+
   const handleSelectEndingChoice = useCallback(
     (choice: 'SAVE_WORLD' | 'RULE_WORLD') => {
       const st = gameRef.current;
@@ -3539,6 +3641,49 @@ export function App() {
         return;
       }
 
+      if (state.screen === 'GAME_OVER') {
+        fpViewModel.group.visible = false;
+        playerGroup.visible = true;
+
+        const slowDt = dt * 0.15;
+        const groundY = getTerrainHeight(state.playerPos.x, state.playerPos.z);
+        playerGroup.position.set(state.playerPos.x, groundY, state.playerPos.z);
+        playerGroup.rotation.y = state.yaw;
+
+        humanoid.updateAnimation({
+          dt: slowDt,
+          time: now * 0.18,
+          speed: 0,
+          forwardInput: 0,
+          rightInput: 0,
+          isSprinting: false,
+          isGrounded: true,
+          isSwimming: false,
+          headPitch: -0.65,
+          equippedWeapon: state.equippedWeapon,
+          attackProgress: 0,
+          bowDrawProgress: 0,
+          bowReleaseTimer: 0,
+          hasArrows: state.arrows > 0,
+          isSeatedOnThrone: false,
+          isCorrupted: isCorruptedRuler,
+          isCelestial: isTranscendentSavior,
+        });
+
+        const slowOrbit = now * 0.00012;
+        const radius = 7.2;
+        const camX = state.playerPos.x + Math.sin(state.yaw + slowOrbit) * radius;
+        const camZ = state.playerPos.z + Math.cos(state.yaw + slowOrbit) * radius;
+        const camY = Math.max(getTerrainHeight(camX, camZ) + 1.5, groundY + 3.8);
+        const tilt = Math.sin(now * 0.00035) * 0.08;
+        camera.up.set(Math.sin(tilt), Math.cos(tilt), 0);
+        camera.position.lerp(new THREE.Vector3(camX, camY, camZ), Math.min(1, dt * 2.5));
+        camera.lookAt(state.playerPos.x, groundY + 1.1, state.playerPos.z);
+
+        renderer.render(scene, camera);
+        return;
+      }
+
       // --- E. GAMEPLAY ACTIF (PLAYING) ---
       if (state.screen === 'PLAYING') {
         const orbsCollectedCount = state.orbs.filter((o) => o.collected).length;
@@ -3647,8 +3792,16 @@ export function App() {
         if (isUnderwater && !isTranscendentSavior) {
           const oxyDrain = activePowers >= 7 ? 2.2 : 6.8;
           state.oxygen = Math.max(0, state.oxygen - oxyDrain * dt);
+          if (state.oxygen <= 0) {
+            state.health = Math.max(0, state.health - 18.0 * dt);
+          }
         } else if (!isTranscendentSavior) {
           state.oxygen = Math.min(100, state.oxygen + 30 * dt);
+        }
+
+        if (state.health <= 0) {
+          triggerGameOver();
+          return;
         }
 
         const powerSpeedBonus = activePowers >= 3 ? 1.0 + activePowers * 0.035 : 1.0;
@@ -3767,7 +3920,6 @@ export function App() {
           state.playerPos.addScaledVector(state.playerVel, dt);
         }
 
-        // Collisions avec les arbres, rochers et tentes
         const playerRadius = 0.55;
         const currentFeetY = state.playerPos.y - eyeOffset;
 
@@ -3797,6 +3949,16 @@ export function App() {
               state.playerVel.z -= vn * nz;
             }
           }
+        }
+
+        const arenaOutBound = WORLD_SIZE / 2 - 4;
+        if (
+          state.playerPos.y < -25 ||
+          Math.abs(state.playerPos.x) > arenaOutBound ||
+          Math.abs(state.playerPos.z) > arenaOutBound
+        ) {
+          triggerGameOver();
+          return;
         }
 
         const maxCoord = WORLD_SIZE / 2 - 15;
@@ -4235,11 +4397,8 @@ export function App() {
           }
 
           if (state.health <= 0) {
-            state.health = 100;
-            const respawnZ = 38;
-            state.playerPos.set(0, getTerrainHeight(0, respawnZ) + 2.0, respawnZ);
-            state.playerVel.set(0, 0, 0);
-            showToast('Terrassé par Malakor ! Relevez-vous et reprenez le combat !');
+            triggerGameOver();
+            return;
           }
 
           if (boss.attackAnimTimer > 0) {
@@ -4266,7 +4425,7 @@ export function App() {
           : Math.max(0.75, 1.45 - orbsCollectedCount * 0.06);
 
         state.enemyInstances.forEach((enemy) => {
-          if (!enemy.alive) return;
+          if (!enemy.alive || state.screen !== 'PLAYING') return;
 
           enemy.setHumanSurvivorMode(isCorruptedRuler);
           enemy.setSpacetimeDemonMode(isTranscendentSavior, now * 0.001);
@@ -4382,11 +4541,8 @@ export function App() {
               }
 
               if (state.health <= 0) {
-                state.health = 100;
-                const spawnY = getTerrainHeight(0, 0) + 2.0;
-                state.playerPos.set(0, spawnY, 0);
-                state.playerVel.set(0, 0, 0);
-                showToast('Vous avez été vaincu ! Retour au Sanctuaire.');
+                triggerGameOver();
+                return;
               }
             }
           } else {
@@ -4667,6 +4823,7 @@ export function App() {
     showToast,
     startOutroCutscene,
     triggerBossIntroWithFade,
+    triggerGameOver,
     triggerLightningDash,
     triggerSolarNova,
     triggerTimeShift,
@@ -4687,13 +4844,17 @@ export function App() {
           }
         }}
         style={
-          endingChoice === 'RULE_WORLD'
+          screen === 'GAME_OVER'
+            ? {
+                filter: 'grayscale(0.88) contrast(1.2) brightness(0.42) blur(1.5px)',
+              }
+            : endingChoice === 'RULE_WORLD'
             ? {
                 filter: 'contrast(1.1) saturate(1.18)',
               }
             : undefined
         }
-        className={`fixed inset-0 w-full h-full z-0 ${
+        className={`fixed inset-0 w-full h-full z-0 transition-all duration-1000 ${
           screen === 'PLAYING' && isMouseCaptured
             ? 'cursor-none'
             : 'cursor-crosshair'
@@ -4777,6 +4938,8 @@ export function App() {
         onSimulateBadEndingCompleted={handleSimulateBadEndingCompleted}
         onTestDimensionalClash={handleTestDimensionalClash}
         onResetAllSaves={handleResetAllSaves}
+        onRetryGameOver={handleRetryGameOver}
+        onForceGameOver={handleForceGameOver}
       />
     </div>
   );

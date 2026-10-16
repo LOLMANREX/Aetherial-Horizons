@@ -22,6 +22,7 @@ import {
   Unlock,
   KeyRound,
   X,
+  Skull,
 } from 'lucide-react';
 
 interface MainMenuProps {
@@ -48,6 +49,8 @@ interface MainMenuProps {
   onSimulateBadEndingCompleted?: () => void;
   onTestDimensionalClash?: () => void;
   onResetAllSaves?: () => void;
+  onRetryGameOver?: () => void;
+  onForceGameOver?: () => void;
 }
 
 export const MainMenu: React.FC<MainMenuProps> = ({
@@ -74,6 +77,8 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   onSimulateBadEndingCompleted,
   onTestDimensionalClash,
   onResetAllSaves,
+  onRetryGameOver,
+  onForceGameOver,
 }) => {
   const [activeTab, setActiveTab] = useState<'MAIN' | 'SAVES' | 'CONTROLS'>('MAIN');
   const [savedToastSlot, setSavedToastSlot] = useState<number | null>(null);
@@ -123,6 +128,50 @@ export const MainMenu: React.FC<MainMenuProps> = ({
     setSavedToastSlot(slotId);
     setTimeout(() => setSavedToastSlot(null), 2000);
   };
+
+  if (screen === 'GAME_OVER') {
+    return (
+      <div
+        className="fixed inset-0 z-40 flex items-center justify-center p-4 pointer-events-auto"
+        style={{
+          background:
+            'radial-gradient(circle at center, rgba(15, 3, 18, 0.78) 0%, rgba(7, 2, 10, 0.94) 68%, rgba(0, 0, 0, 0.98) 100%)',
+          boxShadow: 'inset 0 0 180px rgba(225, 29, 72, 0.35)',
+        }}
+      >
+        <div className="bg-slate-950/90 border border-rose-500/40 rounded-3xl p-8 sm:p-10 max-w-md w-full text-center shadow-[0_0_80px_rgba(225,29,72,0.28)] backdrop-blur-xl">
+          <div className="w-20 h-20 rounded-2xl bg-rose-500/15 border border-rose-500/40 text-rose-400 flex items-center justify-center mx-auto mb-5 shadow-[0_0_30px_rgba(244,63,94,0.3)]">
+            <Skull className="w-10 h-10" />
+          </div>
+          <div className="text-[11px] font-black uppercase tracking-[0.35em] text-rose-400/90 mb-1.5">
+            GAME OVER
+          </div>
+          <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-white mb-3 drop-shadow-[0_2px_12px_rgba(244,63,94,0.5)]">
+            RÉALITÉ BRISÉE
+          </h2>
+          <p className="text-sm text-slate-300/90 leading-relaxed mb-8">
+            Votre essence aéthérique s&apos;est dissipée dans les fractures du multivers. Relevez-vous pour restaurer la trame ou abandonnez cette ligne temporelle.
+          </p>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={onRetryGameOver || onResumeGame}
+              className="w-full py-4 rounded-2xl bg-gradient-to-r from-rose-500 via-red-500 to-amber-500 hover:from-rose-400 hover:to-amber-400 text-slate-950 font-extrabold text-sm flex items-center justify-center gap-2.5 shadow-[0_0_30px_rgba(244,63,94,0.4)] transition-all cursor-pointer"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Réessayer
+            </button>
+            <button
+              onClick={onReturnToMainMenu}
+              className="w-full py-3.5 rounded-2xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white font-bold text-sm flex items-center justify-center gap-2 border border-slate-700/80 transition-all cursor-pointer"
+            >
+              <Home className="w-4 h-4" />
+              Menu Principal
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (screen === 'VICTORY') {
     const isRuler = endingChoice === 'RULE_WORLD';
@@ -687,6 +736,20 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                     >
                       <Film className="w-4 h-4" />
                       Tester cinématique Clash Dimensionnel
+                    </button>
+                  )}
+
+                  {onForceGameOver && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOptionsOpen(false);
+                        onForceGameOver();
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-rose-950/80 hover:bg-rose-900/80 text-rose-200 border border-rose-500/50 font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-rose-950/40 transition-all cursor-pointer"
+                    >
+                      <Skull className="w-4 h-4 text-rose-400" />
+                      Forcer le Game Over
                     </button>
                   )}
 
