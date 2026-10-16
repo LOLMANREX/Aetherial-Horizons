@@ -9,15 +9,18 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "firebase": "latest",
+    "framer-motion": "latest",
+    "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "three": "latest",
-    "lucide-react": "latest",
-    "framer-motion": "latest",
-    "firebase": "latest"
+    "three": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.186.0",
     "@vitejs/plugin-react": "latest",
     "typescript": "latest",
     "vite": "latest"

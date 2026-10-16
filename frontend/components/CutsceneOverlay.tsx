@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, FastForward, ChevronRight, Sun, Flame } from 'lucide-react';
+import { Sparkles, FastForward, ChevronLeft, ChevronRight, Sun, Flame } from 'lucide-react';
 import { EndingChoice } from '../types';
 
 export interface CutsceneSlide {
@@ -77,6 +77,7 @@ interface CutsceneOverlayProps {
   stepProgress: number; // 0 à 1
   endingChoice: EndingChoice;
   onSelectEndingChoice?: (choice: 'SAVE_WORLD' | 'RULE_WORLD') => void;
+  onPrevStep?: () => void;
   onNextStep: () => void;
   onSkip: () => void;
 }
@@ -87,6 +88,7 @@ export const CutsceneOverlay: React.FC<CutsceneOverlayProps> = ({
   stepProgress,
   endingChoice,
   onSelectEndingChoice,
+  onPrevStep,
   onNextStep,
   onSkip,
 }) => {
@@ -233,6 +235,16 @@ export const CutsceneOverlay: React.FC<CutsceneOverlayProps> = ({
                 );
               })}
             </div>
+
+            {!isWaitingForChoice && onPrevStep && stepIndex > 0 && (
+              <button
+                onClick={onPrevStep}
+                className="pointer-events-auto px-4 py-2 rounded-full font-bold text-xs flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-slate-100 transition-all cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Précédent</span>
+              </button>
+            )}
 
             {!isWaitingForChoice && (
               <button

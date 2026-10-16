@@ -9,6 +9,8 @@ import {
 } from '../types';
 import { getTerrainHeight, pseudoRandom, WORLD_SIZE } from '../utils/noise';
 import { ZoomIn, ZoomOut } from 'lucide-react';
+import { registerMinimapRenderer, LiveMinimapData } from '../utils/minimapBridge';
+import { EnemyInstance3D, BossInstance3D, LootPickup3D } from '../utils/combatModels';
 
 interface MinimapProps {
   player: PlayerStats;
@@ -152,6 +154,301 @@ function getOrGenerateTerrainMap(): HTMLCanvasElement {
   return offscreen;
 }
 
+interface DrawParams {
+  canvas: HTMLCanvasElement;
+  northBadge: HTMLDivElement | null;
+  playerPos: { x: number; z: number };
+  headingRad: number;
+  orbs: OrbData[];
+  enemies: (EnemyInstance3D | EnemyData)[];
+  camps: CampData[];
+  lootPickups: (LootPickup3D | LootPickupData)[];
+  boss: BossInstance3D | BossData | null;
+  radarRangeMeters: number;
+}
+
+function drawMinimap({
+  canvas,
+  northBadge,
+  playerPos,
+  headingRad,
+  orbs,
+  enemies,
+  camps,
+  lootPickups,
+  boss,
+  radarRangeMeters,
+}: DrawParams) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const terrainMap = getOrGenerateTerrainMap();
+  const size = canvas.width;
+  const half = size / 2;
+
+  ctx.clearRect(0, 0, size, size);
+
+  const pixelsPerMeter = half / radarRangeMeters;
+  const texPixelsPerMeter = MAP_TEX_SIZE / WORLD_SIZE;
+  const mapScale = pixelsPerMeter / texPixelsPerMeter;
+
+  const playerTexX = (playerPos.x / WORLD_SIZE + 0.5) * MAP_TEX_SIZE;
+  const playerTexY = (playerPos.z / WORLD_SIZE + 0.5) * MAP_TEX_SIZE;
+
+  // 1. DESSIN DU TERRAIN TOPOGRAPHIQUE ROTATIF
+  ctx.save();
+  ctx.fillStyle = '#0f2942';
+  ctx.fillRect(0, 0, size, size);
+  ctx.translate(half, half);
+  ctx.rotate(-headingRad);
+  ctx.scale(mapScale, mapScale);
+  ctx.drawImage(terrainMap, -playerTexX, -playerTexY);
+  ctx.restore();
+
+  // 2. CÔNE DE VISION DU JOUEUR
+  ctx.save();
+  const grad = ctx.createRadialGradient(half, half, 4, half, half, half * 0.78);
+  grad.addColorStop(0, 'rgba(251, 191, 36, 0.25)');
+  grad.addColorStop(1, 'rgba(251, 191, 36, 0.0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(half, half);
+  ctx.arc(half, half, half * 0.78, -Math.PI / 2 - 0.6, -Math.PI / 2 + 0.6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  // 3. CAMPS ENNEMIS
+  camps.forEach((camp) => {
+    const dx = camp.x - playerPos.x;
+    const dz = camp.z - playerPos.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist > radarRangeMeters * 0.95) return;
+
+    const worldAngle = Math.atan2(dx, -dz);
+    const relAngle = worldAngle - headingRad;
+    const rPx = dist * pixelsPerMeter;
+    const cx = half + Math.sin(relAngle) * rPx;
+    const cy = half - Math.cos(relAngle) * rPx;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(249, 115, 22, 0.28)';
+    ctx.strokeStyle = 'rgba(251, 146, 60, 0.85)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  });
+
+  // 4. CAISSES DE FLÈCHES / BUTIN
+  lootPickups.forEach((loot) => {
+    if (loot.collected) return;
+    const lxPos = 'position' in loot ? loot.position.x : loot.x;
+    const lzPos = 'position' in loot ? loot.position.z : loot.z;
+    const dx = lxPos - playerPos.x;
+    const dz = lzPos - playerPos.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist > radarRangeMeters * 0.9) return;
+
+    const worldAngle = Math.atan2(dx, -dz);
+    const relAngle = worldAngle - headingRad;
+    const rPx = dist * pixelsPerMeter;
+    const lx = half + Math.sin(relAngle) * rPx;
+    const ly = half - Math.cos(relAngle) * rPx;
+
+    ctx.save();
+    ctx.fillStyle = '#facc15';
+    ctx.strokeStyle = '#020617';
+    ctx.lineWidth = 1;
+    ctx.fillRect(lx - 2.5, ly - 2.5, 5, 5);
+    ctx.strokeRect(lx - 2.5, ly - 2.5, 5, 5);
+    ctx.restore();
+  });
+
+  // 5. ENNEMIS ACTIFS
+  enemies.forEach((enemy) => {
+    if (!enemy.alive) return;
+    const exPos = 'position' in enemy ? enemy.position.x : enemy.x;
+    const ezPos = 'position' in enemy ? enemy.position.z : enemy.z;
+    const dx = exPos - playerPos.x;
+    const dz = ezPos - playerPos.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist > radarRangeMeters * 0.92) return;
+
+    const worldAngle = Math.atan2(dx, -dz);
+    const relAngle = worldAngle - headingRad;
+    const rPx = dist * pixelsPerMeter;
+    const ex = half + Math.sin(relAngle) * rPx;
+    const ey = half - Math.cos(relAngle) * rPx;
+
+    ctx.save();
+    ctx.fillStyle = '#f43f5e';
+    ctx.strokeStyle = '#020617';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(ex, ey, 3.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  });
+
+  // 6. LIGNE GPS VERS LE BOSS (SI ACTIF) OU VERS L'ORBE LA PLUS PROCHE
+  const isBossActive = boss && boss.active && !boss.defeated;
+  if (isBossActive) {
+    const bxPos = 'position' in boss ? boss.position.x : boss.x;
+    const bzPos = 'position' in boss ? boss.position.z : boss.z;
+    const dx = bxPos - playerPos.x;
+    const dz = bzPos - playerPos.z;
+    const dist = Math.hypot(dx, dz);
+    const worldAngle = Math.atan2(dx, -dz);
+    const relAngle = worldAngle - headingRad;
+    const maxBlipRadius = half - 10;
+    const rPx = Math.min(dist * pixelsPerMeter, maxBlipRadius);
+    const bx = half + Math.sin(relAngle) * rPx;
+    const by = half - Math.cos(relAngle) * rPx;
+
+    // Tracé GPS rouge vers le Boss
+    ctx.save();
+    ctx.strokeStyle = 'rgba(244, 63, 94, 0.85)';
+    ctx.lineWidth = 2.4;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(half, half);
+    ctx.lineTo(bx, by);
+    ctx.stroke();
+    ctx.restore();
+
+    // Marqueur Boss géant sur la minimap
+    ctx.save();
+    ctx.fillStyle = 'rgba(244, 63, 94, 0.35)';
+    ctx.beginPath();
+    ctx.arc(bx, by, 10, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#e11d48';
+    ctx.strokeStyle = '#fef08a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(bx, by, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  } else {
+    let nearestOrb: OrbData | null = null;
+    let minDist = Infinity;
+    for (const o of orbs) {
+      if (o.collected) continue;
+      const d = Math.hypot(o.x - playerPos.x, o.z - playerPos.z);
+      if (d < minDist) {
+        minDist = d;
+        nearestOrb = o;
+      }
+    }
+
+    if (nearestOrb) {
+      const dx = nearestOrb.x - playerPos.x;
+      const dz = nearestOrb.z - playerPos.z;
+      const worldAngle = Math.atan2(dx, -dz);
+      const relAngle = worldAngle - headingRad;
+      const clampedDist = Math.min(minDist, radarRangeMeters * 0.88);
+      const targetX = half + Math.sin(relAngle) * (clampedDist * pixelsPerMeter);
+      const targetY = half - Math.cos(relAngle) * (clampedDist * pixelsPerMeter);
+
+      ctx.save();
+      ctx.strokeStyle = 'rgba(34, 211, 238, 0.75)';
+      ctx.lineWidth = 2.2;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(half, half);
+      ctx.lineTo(targetX, targetY);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // 7. ICÔNES DES ORBES (BLIPS CYAN)
+  orbs.forEach((orb) => {
+    const dx = orb.x - playerPos.x;
+    const dz = orb.z - playerPos.z;
+    const dist = Math.hypot(dx, dz);
+
+    const worldAngle = Math.atan2(dx, -dz);
+    const relAngle = worldAngle - headingRad;
+
+    if (orb.collected) {
+      if (dist > radarRangeMeters * 0.9) return;
+      const rPx = dist * pixelsPerMeter;
+      const bx = half + Math.sin(relAngle) * rPx;
+      const by = half - Math.cos(relAngle) * rPx;
+
+      ctx.save();
+      ctx.fillStyle = 'rgba(16, 185, 129, 0.55)';
+      ctx.beginPath();
+      ctx.arc(bx, by, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+
+    const maxBlipRadius = half - 10;
+    const rawRadiusPx = dist * pixelsPerMeter;
+    const isClamped = rawRadiusPx > maxBlipRadius;
+    const rPx = Math.min(rawRadiusPx, maxBlipRadius);
+
+    const bx = half + Math.sin(relAngle) * rPx;
+    const by = half - Math.cos(relAngle) * rPx;
+
+    ctx.save();
+    if (!isClamped) {
+      ctx.fillStyle = 'rgba(34, 211, 238, 0.32)';
+      ctx.beginPath();
+      ctx.arc(bx, by, 7.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.fillStyle = isClamped ? '#67e8f9' : '#22d3ee';
+    ctx.strokeStyle = '#020617';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(bx, by, isClamped ? 3.8 : 4.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  });
+
+  // 8. CURSEUR JOUEUR AU CENTRE
+  ctx.save();
+  ctx.translate(half, half);
+  ctx.fillStyle = '#fbbf24';
+  ctx.strokeStyle = '#020617';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, -7);
+  ctx.lineTo(5.5, 6);
+  ctx.lineTo(0, 3.2);
+  ctx.lineTo(-5.5, 6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+
+  const vignette = ctx.createRadialGradient(half, half, half * 0.72, half, half, half);
+  vignette.addColorStop(0, 'rgba(2, 6, 23, 0)');
+  vignette.addColorStop(1, 'rgba(2, 6, 23, 0.55)');
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, size, size);
+
+  // 9. POSITIONNEMENT DE LA BOUSSOLE "N" (FLUIDE 60FPS SANS RE-RENDER REACT)
+  if (northBadge) {
+    const badgeRadius = 64;
+    const northX = Math.sin(-headingRad) * badgeRadius;
+    const northY = -Math.cos(-headingRad) * badgeRadius;
+    northBadge.style.transform = `translate(${northX}px, ${northY}px)`;
+  }
+}
+
 export const Minimap: React.FC<MinimapProps> = ({
   player,
   orbs,
@@ -161,273 +458,64 @@ export const Minimap: React.FC<MinimapProps> = ({
   boss,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const northBadgeRef = useRef<HTMLDivElement | null>(null);
   const [zoomOut, setZoomOut] = useState(false);
+  const zoomOutRef = useRef(zoomOut);
+  zoomOutRef.current = zoomOut;
 
-  const radarRangeMeters = zoomOut ? 300 : 175;
+  // Enregistrement au bridge 60fps pour rendu synchrone avec Three.js
+  useEffect(() => {
+    const handleLiveFrame = (liveData: LiveMinimapData) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const radarRange = zoomOutRef.current ? 300 : 175;
+      const headingRad = -liveData.yaw;
 
+      drawMinimap({
+        canvas,
+        northBadge: northBadgeRef.current,
+        playerPos: { x: liveData.playerPos.x, z: liveData.playerPos.z },
+        headingRad,
+        orbs: liveData.orbs,
+        enemies: liveData.enemies,
+        camps: liveData.camps,
+        lootPickups: liveData.lootPickups,
+        boss: liveData.boss,
+        radarRangeMeters: radarRange,
+      });
+    };
+
+    registerMinimapRenderer(handleLiveFrame);
+    return () => {
+      registerMinimapRenderer(null);
+    };
+  }, []);
+
+  // Rendu de secours / initial quand la boucle live n'a pas encore émis
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const terrainMap = getOrGenerateTerrainMap();
-    const size = canvas.width;
-    const half = size / 2;
+    const radarRange = zoomOut ? 300 : 175;
     const headingRad = (player.heading * Math.PI) / 180;
 
-    ctx.clearRect(0, 0, size, size);
-
-    const pixelsPerMeter = half / radarRangeMeters;
-    const texPixelsPerMeter = MAP_TEX_SIZE / WORLD_SIZE;
-    const mapScale = pixelsPerMeter / texPixelsPerMeter;
-
-    const playerTexX = (player.x / WORLD_SIZE + 0.5) * MAP_TEX_SIZE;
-    const playerTexY = (player.z / WORLD_SIZE + 0.5) * MAP_TEX_SIZE;
-
-    // 1. DESSIN DU TERRAIN TOPOGRAPHIQUE ROTATIF
-    ctx.save();
-    ctx.fillStyle = '#0f2942';
-    ctx.fillRect(0, 0, size, size);
-    ctx.translate(half, half);
-    ctx.rotate(-headingRad);
-    ctx.scale(mapScale, mapScale);
-    ctx.drawImage(terrainMap, -playerTexX, -playerTexY);
-    ctx.restore();
-
-    // 2. CÔNE DE VISION DU JOUEUR
-    ctx.save();
-    const grad = ctx.createRadialGradient(half, half, 4, half, half, half * 0.78);
-    grad.addColorStop(0, 'rgba(251, 191, 36, 0.25)');
-    grad.addColorStop(1, 'rgba(251, 191, 36, 0.0)');
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.moveTo(half, half);
-    ctx.arc(half, half, half * 0.78, -Math.PI / 2 - 0.6, -Math.PI / 2 + 0.6);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-
-    // 3. CAMPS ENNEMIS
-    camps.forEach((camp) => {
-      const dx = camp.x - player.x;
-      const dz = camp.z - player.z;
-      const dist = Math.hypot(dx, dz);
-      if (dist > radarRangeMeters * 0.95) return;
-
-      const worldAngle = Math.atan2(dx, -dz);
-      const relAngle = worldAngle - headingRad;
-      const rPx = dist * pixelsPerMeter;
-      const cx = half + Math.sin(relAngle) * rPx;
-      const cy = half - Math.cos(relAngle) * rPx;
-
-      ctx.save();
-      ctx.fillStyle = 'rgba(249, 115, 22, 0.28)';
-      ctx.strokeStyle = 'rgba(251, 146, 60, 0.85)';
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.arc(cx, cy, 7, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
+    drawMinimap({
+      canvas,
+      northBadge: northBadgeRef.current,
+      playerPos: { x: player.x, z: player.z },
+      headingRad,
+      orbs,
+      enemies,
+      camps,
+      lootPickups,
+      boss,
+      radarRangeMeters: radarRange,
     });
+  }, [player.x, player.z, player.heading, orbs, enemies, camps, lootPickups, boss, zoomOut]);
 
-    // 4. CAISSES DE FLÈCHES / BUTIN
-    lootPickups.forEach((loot) => {
-      if (loot.collected) return;
-      const dx = loot.x - player.x;
-      const dz = loot.z - player.z;
-      const dist = Math.hypot(dx, dz);
-      if (dist > radarRangeMeters * 0.9) return;
-
-      const worldAngle = Math.atan2(dx, -dz);
-      const relAngle = worldAngle - headingRad;
-      const rPx = dist * pixelsPerMeter;
-      const lx = half + Math.sin(relAngle) * rPx;
-      const ly = half - Math.cos(relAngle) * rPx;
-
-      ctx.save();
-      ctx.fillStyle = '#facc15';
-      ctx.strokeStyle = '#020617';
-      ctx.lineWidth = 1;
-      ctx.fillRect(lx - 2.5, ly - 2.5, 5, 5);
-      ctx.strokeRect(lx - 2.5, ly - 2.5, 5, 5);
-      ctx.restore();
-    });
-
-    // 5. ENNEMIS ACTIFS
-    enemies.forEach((enemy) => {
-      if (!enemy.alive) return;
-      const dx = enemy.x - player.x;
-      const dz = enemy.z - player.z;
-      const dist = Math.hypot(dx, dz);
-      if (dist > radarRangeMeters * 0.92) return;
-
-      const worldAngle = Math.atan2(dx, -dz);
-      const relAngle = worldAngle - headingRad;
-      const rPx = dist * pixelsPerMeter;
-      const ex = half + Math.sin(relAngle) * rPx;
-      const ey = half - Math.cos(relAngle) * rPx;
-
-      ctx.save();
-      ctx.fillStyle = '#f43f5e';
-      ctx.strokeStyle = '#020617';
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.arc(ex, ey, 3.6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
-    });
-
-    // 6. LIGNE GPS VERS LE BOSS (SI ACTIF) OU VERS L'ORBE LA PLUS PROCHE
-    if (boss.active && !boss.defeated) {
-      const dx = boss.x - player.x;
-      const dz = boss.z - player.z;
-      const dist = Math.hypot(dx, dz);
-      const worldAngle = Math.atan2(dx, -dz);
-      const relAngle = worldAngle - headingRad;
-      const maxBlipRadius = half - 10;
-      const rPx = Math.min(dist * pixelsPerMeter, maxBlipRadius);
-      const bx = half + Math.sin(relAngle) * rPx;
-      const by = half - Math.cos(relAngle) * rPx;
-
-      // Tracé GPS rouge vers le Boss
-      ctx.save();
-      ctx.strokeStyle = 'rgba(244, 63, 94, 0.85)';
-      ctx.lineWidth = 2.4;
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.moveTo(half, half);
-      ctx.lineTo(bx, by);
-      ctx.stroke();
-      ctx.restore();
-
-      // Marqueur Boss géant sur la minimap
-      ctx.save();
-      ctx.fillStyle = 'rgba(244, 63, 94, 0.35)';
-      ctx.beginPath();
-      ctx.arc(bx, by, 10, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = '#e11d48';
-      ctx.strokeStyle = '#fef08a';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(bx, by, 6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
-    } else {
-      let nearestOrb: OrbData | null = null;
-      let minDist = Infinity;
-      for (const o of orbs) {
-        if (o.collected) continue;
-        const d = Math.hypot(o.x - player.x, o.z - player.z);
-        if (d < minDist) {
-          minDist = d;
-          nearestOrb = o;
-        }
-      }
-
-      if (nearestOrb) {
-        const dx = nearestOrb.x - player.x;
-        const dz = nearestOrb.z - player.z;
-        const worldAngle = Math.atan2(dx, -dz);
-        const relAngle = worldAngle - headingRad;
-        const clampedDist = Math.min(minDist, radarRangeMeters * 0.88);
-        const targetX = half + Math.sin(relAngle) * (clampedDist * pixelsPerMeter);
-        const targetY = half - Math.cos(relAngle) * (clampedDist * pixelsPerMeter);
-
-        ctx.save();
-        ctx.strokeStyle = 'rgba(34, 211, 238, 0.75)';
-        ctx.lineWidth = 2.2;
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.moveTo(half, half);
-        ctx.lineTo(targetX, targetY);
-        ctx.stroke();
-        ctx.restore();
-      }
-    }
-
-    // 7. ICÔNES DES ORBES (BLIPS CYAN)
-    orbs.forEach((orb) => {
-      const dx = orb.x - player.x;
-      const dz = orb.z - player.z;
-      const dist = Math.hypot(dx, dz);
-
-      const worldAngle = Math.atan2(dx, -dz);
-      const relAngle = worldAngle - headingRad;
-
-      if (orb.collected) {
-        if (dist > radarRangeMeters * 0.9) return;
-        const rPx = dist * pixelsPerMeter;
-        const bx = half + Math.sin(relAngle) * rPx;
-        const by = half - Math.cos(relAngle) * rPx;
-
-        ctx.save();
-        ctx.fillStyle = 'rgba(16, 185, 129, 0.55)';
-        ctx.beginPath();
-        ctx.arc(bx, by, 3, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-        return;
-      }
-
-      const maxBlipRadius = half - 10;
-      const rawRadiusPx = dist * pixelsPerMeter;
-      const isClamped = rawRadiusPx > maxBlipRadius;
-      const rPx = Math.min(rawRadiusPx, maxBlipRadius);
-
-      const bx = half + Math.sin(relAngle) * rPx;
-      const by = half - Math.cos(relAngle) * rPx;
-
-      ctx.save();
-      if (!isClamped) {
-        ctx.fillStyle = 'rgba(34, 211, 238, 0.32)';
-        ctx.beginPath();
-        ctx.arc(bx, by, 7.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      ctx.fillStyle = isClamped ? '#67e8f9' : '#22d3ee';
-      ctx.strokeStyle = '#020617';
-      ctx.lineWidth = 1.6;
-      ctx.beginPath();
-      ctx.arc(bx, by, isClamped ? 3.8 : 4.6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
-    });
-
-    // 8. CURSEUR JOUEUR AU CENTRE
-    ctx.save();
-    ctx.translate(half, half);
-    ctx.fillStyle = '#fbbf24';
-    ctx.strokeStyle = '#020617';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(0, -7);
-    ctx.lineTo(5.5, 6);
-    ctx.lineTo(0, 3.2);
-    ctx.lineTo(-5.5, 6);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
-
-    const vignette = ctx.createRadialGradient(half, half, half * 0.72, half, half, half);
-    vignette.addColorStop(0, 'rgba(2, 6, 23, 0)');
-    vignette.addColorStop(1, 'rgba(2, 6, 23, 0.55)');
-    ctx.fillStyle = vignette;
-    ctx.fillRect(0, 0, size, size);
-  }, [player.x, player.z, player.heading, orbs, enemies, camps, lootPickups, boss, radarRangeMeters]);
-
-  const headingRad = (player.heading * Math.PI) / 180;
+  const initialHeadingRad = (player.heading * Math.PI) / 180;
   const badgeRadius = 64;
-  const northX = Math.sin(-headingRad) * badgeRadius;
-  const northY = -Math.cos(-headingRad) * badgeRadius;
+  const initialNorthX = Math.sin(-initialHeadingRad) * badgeRadius;
+  const initialNorthY = -Math.cos(-initialHeadingRad) * badgeRadius;
 
   return (
     <div className="relative flex items-center justify-center select-none pointer-events-auto group">
@@ -444,9 +532,10 @@ export const Minimap: React.FC<MinimapProps> = ({
       </div>
 
       <div
+        ref={northBadgeRef}
         className="absolute z-20 w-5 h-5 rounded-full bg-slate-950 border border-amber-400/80 flex items-center justify-center text-[10px] font-black text-amber-400 shadow-md pointer-events-none"
         style={{
-          transform: `translate(${northX}px, ${northY}px)`,
+          transform: `translate(${initialNorthX}px, ${initialNorthY}px)`,
         }}
       >
         N

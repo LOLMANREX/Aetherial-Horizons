@@ -53,6 +53,7 @@ import {
   syncSavesFromCloud,
 } from './utils/saveManager';
 import { soundFX } from './utils/sound';
+import { renderMinimapFrame } from './utils/minimapBridge';
 
 const ORB_NAMES = [
   'Orbe de l’Aube Éternelle',
@@ -3905,6 +3906,18 @@ export function App() {
       }
 
       renderer.render(scene, camera);
+
+      if (state.screen === 'PLAYING') {
+        renderMinimapFrame({
+          playerPos: state.playerPos,
+          yaw: state.yaw,
+          orbs: state.orbs,
+          camps: state.camps,
+          enemies: state.enemyInstances,
+          lootPickups: state.lootInstances,
+          boss: state.bossInstance,
+        });
+      }
     };
 
     animationFrameId = requestAnimationFrame(animate);
