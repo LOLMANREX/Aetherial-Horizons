@@ -552,14 +552,15 @@ export function App() {
       const centerGroundY = getTerrainHeight(0, 0);
 
       if (choice === 'SAVE_WORLD') {
-        st.timeOfDay = 10.5;
+        st.timeOfDay = 11.2;
         soundFX.playNovaBlast();
+        soundFX.playTimeShift();
 
         if (st.sovereignThrone) {
           st.sovereignThrone.group.visible = false;
         }
         if (st.skyPillarMesh) {
-          (st.skyPillarMesh.material as THREE.MeshBasicMaterial).color.setHex(0x38bdf8);
+          (st.skyPillarMesh.material as THREE.MeshBasicMaterial).color.setHex(0xfef08a);
         }
         if (st.restoredHeartMesh) {
           st.restoredHeartMesh.visible = true;
@@ -576,7 +577,7 @@ export function App() {
             const ey = getTerrainHeight(ex, ez);
             enemy.position.set(ex, ey, ez);
             enemy.group.position.set(ex, ey, ez);
-            enemy.group.scale.set(1.25, 1.25, 1.25);
+            enemy.group.scale.set(1.3, 1.3, 1.3);
             enemy.group.rotation.y = Math.atan2(-ex, -ez);
             enemy.group.visible = true;
             enemy.hpBarGroup.visible = false;
@@ -590,6 +591,7 @@ export function App() {
           st.purificationWaveMesh.visible = true;
           st.purificationWaveMesh.position.set(0, centerGroundY + 1.5, 0);
           st.purificationWaveMesh.scale.set(1, 1, 1);
+          (st.purificationWaveMesh.material as THREE.MeshBasicMaterial).color.setHex(0xfde047);
         }
       } else {
         st.timeOfDay = 18.6;
@@ -2879,16 +2881,28 @@ export function App() {
             camera.lookAt(0, spawnGroundY + 3.5, 0);
           }
         } else {
-          scene.background = skyDayColor;
-          fog.color.copy(skyDayColor);
+          currentSkyColor.lerpColors(skyTranscendentColor, skyDayColor, 0.55);
+          scene.background = currentSkyColor;
+          fog.color.copy(currentSkyColor);
           fog.density = 0.0018;
-          sunLight.color.setHex(0xfffbeb);
-          sunLight.intensity = 2.2;
+          sunLight.color.setHex(0xfef08a);
+          sunLight.intensity = 2.4;
+          starsMat.opacity = 0.9;
           camera.up.set(0, 1, 0);
 
-          playerGroup.position.set(0, getTerrainHeight(0, 8), 8);
-          playerGroup.rotation.y = 0;
+          const ascensionHeight = stepIdx === 2 ? Math.min(1, stepProgress * 1.35) * 4.5 + Math.sin(now * 0.004) * 0.35 : 0;
+          playerGroup.position.set(0, getTerrainHeight(0, 0) + ascensionHeight, 0);
+          playerGroup.rotation.y = stepIdx === 2 ? now * 0.0008 : 0;
           playerGroup.visible = true;
+
+          if (state.restoredHeartMesh) {
+            state.restoredHeartMesh.position.y = 9 - Math.min(1, stepProgress * 1.4) * 6.5;
+            const heartScale = Math.max(0.25, 1 - stepProgress * 0.75);
+            state.restoredHeartMesh.scale.set(heartScale, heartScale, heartScale);
+          }
+          crownGroup.position.y = playerGroup.position.y - spawnGroundY + 1.5;
+          crownGroup.rotation.y -= dt * 3.8;
+
           humanoid.updateAnimation({
             dt,
             time: now,
@@ -2896,9 +2910,9 @@ export function App() {
             forwardInput: 0,
             rightInput: 0,
             isSprinting: false,
-            isGrounded: true,
+            isGrounded: ascensionHeight < 0.2,
             isSwimming: false,
-            headPitch: 0.3,
+            headPitch: -0.25,
             equippedWeapon: 'SWORD',
             attackProgress: 0,
             bowDrawProgress: 0,
@@ -2911,7 +2925,7 @@ export function App() {
           if (stepIdx === 2) {
             if (state.purificationWaveMesh) {
               state.purificationWaveMesh.visible = true;
-              const waveScale = 1 + stepProgress * 24;
+              const waveScale = 1 + stepProgress * 26;
               state.purificationWaveMesh.scale.set(
                 waveScale,
                 waveScale,
@@ -2919,37 +2933,37 @@ export function App() {
               );
               const mat = state.purificationWaveMesh
                 .material as THREE.MeshBasicMaterial;
-              mat.opacity = Math.max(0.05, (1 - stepProgress * 0.85) * 0.5);
+              mat.opacity = Math.max(0.08, (1 - stepProgress * 0.8) * 0.55);
             }
 
             state.enemyInstances.forEach((enemy, idx) => {
               if (idx < 12) {
                 const localP = Math.max(
                   0,
-                  Math.min(1, (stepProgress - (idx % 4) * 0.08) / 0.82)
+                  Math.min(1, (stepProgress - (idx % 4) * 0.06) / 0.8)
                 );
                 const baseH = getTerrainHeight(
                   enemy.position.x,
                   enemy.position.z
                 );
-                enemy.group.position.y = baseH + localP * 14.0;
-                enemy.group.rotation.y += dt * (3.0 + localP * 8.0);
-                enemy.leftArm.rotation.x = -1.2;
-                enemy.rightArm.rotation.x = -1.2;
-                const shrink = Math.max(0.001, (1 - localP) * 1.25);
-                enemy.group.scale.set(shrink, shrink, shrink);
-                enemy.group.visible = localP < 0.98;
+                enemy.group.position.y = baseH + Math.sin(now * 0.006 + idx) * 0.6;
+                enemy.group.rotation.y = Math.atan2(-enemy.position.x, -enemy.position.z) + Math.sin(now * 0.012 + idx) * 0.25;
+                enemy.leftArm.rotation.x = -0.9 - Math.sin(now * 0.008 + idx) * 0.35;
+                enemy.rightArm.rotation.x = -0.9 + Math.cos(now * 0.008 + idx) * 0.35;
+                const emergeScale = Math.max(0.01, localP * 1.35);
+                enemy.group.scale.set(emergeScale, emergeScale, emergeScale);
+                enemy.group.visible = true;
               }
             });
 
-            const camAngle = now * 0.00035;
-            const camRadius = 25 - stepProgress * 3;
+            const camAngle = now * 0.00045;
+            const camRadius = 18 - stepProgress * 4;
             camera.position.set(
               Math.sin(camAngle) * camRadius,
-              spawnGroundY + 7 + stepProgress * 4,
+              spawnGroundY + 4.5 + stepProgress * 3.5,
               Math.cos(camAngle) * camRadius
             );
-            camera.lookAt(0, spawnGroundY + 4 + stepProgress * 3, 0);
+            camera.lookAt(0, playerGroup.position.y + 1.2, 0);
           } else {
             if (state.purificationWaveMesh) {
               state.purificationWaveMesh.visible = false;

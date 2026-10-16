@@ -59,22 +59,22 @@ export const OUTRO_SLIDES: CutsceneSlide[] = [
   },
   {
     chapter: 'LE DILEMME ULTIME',
-    title: 'L’Heure du Choix',
+    title: 'L’Heure de la Transcendance',
     subtitle:
-      'Le Réceptacle attend votre décision. Allez-vous y sceller vos 10 Orbes pour guérir et sauver le monde, ou briser le Réceptacle et garder tous vos pouvoirs pour gouverner Aetheria ?',
+      'Le Réceptacle attend votre décision. Allez-vous fusionner son essence stellaire avec vos 10 Orbes pour transcender en Entité Céleste et illuminer Aetheria, ou le corrompre pour régner en Souverain du Néant ?',
   },
   {
-    chapter: 'LÉGENDE D’AETHERIA',
-    title: 'Un Nouveau Destin',
+    chapter: 'APOTHÉOSE COSMIQUE',
+    title: 'L’Ascension de l’Entité Céleste',
     subtitle:
-      'Votre choix résonne à travers l’éternité.',
+      'En éveillant le Réceptacle, vous ne perdez aucun pouvoir : les 10 Orbes fusionnent avec votre âme dans un éclat d’or et de lumière pure. Vos capacités transcendent en Pouvoirs Cosmiques Divins, mais cette onde astrale fissure le multivers et attire les Démons de l’Espace-Temps !',
   },
 ];
 
 interface CutsceneOverlayProps {
   mode: 'INTRO' | 'BOSS' | 'OUTRO';
   stepIndex: number;
-  stepProgress: number; // 0 à 1
+  stepProgress: number;
   endingChoice: EndingChoice;
   onSelectEndingChoice?: (choice: 'SAVE_WORLD' | 'RULE_WORLD') => void;
   onPrevStep?: () => void;
@@ -100,7 +100,6 @@ export const CutsceneOverlay: React.FC<CutsceneOverlayProps> = ({
       : OUTRO_SLIDES;
   const current = slides[Math.min(stepIndex, slides.length - 1)];
 
-  // En mode OUTRO, à l'étape 1 (si pas encore choisi), afficher les 2 grands choix moraux
   const isWaitingForChoice =
     mode === 'OUTRO' && stepIndex === 1 && endingChoice === 'NONE';
 
@@ -108,9 +107,9 @@ export const CutsceneOverlay: React.FC<CutsceneOverlayProps> = ({
   let displaySubtitle = current.subtitle;
   if (mode === 'OUTRO' && stepIndex === 2) {
     if (endingChoice === 'SAVE_WORLD') {
-      displayTitle = 'Le Sacrifice du Sauveur';
+      displayTitle = 'L’Apothéose de l’Entité Céleste';
       displaySubtitle =
-        'Vous avez scellé les 10 Orbes dans le Réceptacle. Vos pouvoirs divins se sont dissipés dans un pilier de lumière pure qui a purifié toutes les terres d’Aetheria. Le monde est sauvé et en paix.';
+        'Loin de se dissiper, vos 10 Orbes ont fusionné avec le Cœur Solaire en vous ! Paré d’une armure astrale blanc et or, vous conservez et transcendez tous vos pouvoirs divins (Saut Dimensionnel, Firmament, Jugement du Cosmos) face aux Démons de l’Espace-Temps.';
     } else if (endingChoice === 'RULE_WORLD') {
       displayTitle = 'Le Règne du Souverain Aethérique';
       displaySubtitle =
@@ -120,7 +119,6 @@ export const CutsceneOverlay: React.FC<CutsceneOverlayProps> = ({
 
   return (
     <div className="fixed inset-0 z-20 pointer-events-none flex flex-col justify-between select-none font-sans">
-      {/* Bande noire cinéma supérieure (Letterbox) */}
       <div className="w-full h-20 sm:h-24 bg-gradient-to-b from-black via-black/90 to-transparent flex items-start justify-between px-6 sm:px-10 pt-5">
         <div className="flex items-center gap-2.5 text-xs font-bold tracking-[0.2em] uppercase text-cyan-300/90">
           <Sparkles className="w-4 h-4 text-cyan-400 animate-pulse" />
@@ -138,36 +136,33 @@ export const CutsceneOverlay: React.FC<CutsceneOverlayProps> = ({
         )}
       </div>
 
-      {/* CENTRE : LES 2 CHOIX MORAUX DE LA CINÉMATIQUE DE FIN */}
       {isWaitingForChoice && onSelectEndingChoice && (
         <div className="pointer-events-auto flex-1 flex items-center justify-center px-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 max-w-3xl w-full">
-            {/* CHOIX 1 : RENDRE LES ORBES & SAUVER LE MONDE */}
             <button
               onClick={() => onSelectEndingChoice('SAVE_WORLD')}
-              className="group bg-slate-950/85 hover:bg-emerald-950/80 backdrop-blur-xl border-2 border-emerald-400/50 hover:border-emerald-300 rounded-3xl p-6 text-left transition-all transform hover:scale-[1.03] shadow-[0_0_40px_rgba(16,185,129,0.25)] cursor-pointer flex flex-col justify-between"
+              className="group bg-slate-950/85 hover:bg-amber-950/80 backdrop-blur-xl border-2 border-amber-300/60 hover:border-amber-200 rounded-3xl p-6 text-left transition-all transform hover:scale-[1.03] shadow-[0_0_40px_rgba(251,191,36,0.3)] cursor-pointer flex flex-col justify-between"
             >
               <div>
-                <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-300 mb-4 group-hover:scale-110 transition-transform">
+                <div className="w-12 h-12 rounded-2xl bg-amber-400/20 border border-amber-300/50 flex items-center justify-center text-amber-200 mb-4 group-hover:scale-110 transition-transform">
                   <Sun className="w-6 h-6" />
                 </div>
-                <div className="text-[11px] font-bold uppercase tracking-widest text-emerald-400 mb-1">
-                  Voie de l’Harmonie
+                <div className="text-[11px] font-bold uppercase tracking-widest text-amber-300 mb-1">
+                  Voie de la Transcendance
                 </div>
                 <h3 className="text-xl font-black text-white mb-2">
-                  Rendre les Orbes & Sauver le Monde
+                  Transcender en Entité Céleste
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                  Placez les 10 Orbes dans le Réceptacle Sacré pour purifier Aetheria et faire disparaître les Maraudeurs. Vous renoncez à vos pouvoirs divins pour offrir la paix au monde.
+                  Unissez le Réceptacle Sacré à votre âme pour restaurer la lumière d’Aetheria sans perdre aucun pouvoir. Vous éveillez l’Arsenal Cosmique (Lame de l’Origine, Arc Stellaire, Jugement du Cosmos) pour affronter les Démons de l’Espace-Temps.
                 </p>
               </div>
-              <div className="mt-5 pt-3 border-t border-emerald-500/20 flex items-center justify-between text-xs font-extrabold text-emerald-300">
-                <span>Choisir ce destin</span>
+              <div className="mt-5 pt-3 border-t border-amber-400/25 flex items-center justify-between text-xs font-extrabold text-amber-200">
+                <span>Choisir l’Ascension Céleste</span>
                 <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </div>
             </button>
 
-            {/* CHOIX 2 : GARDER SES POUVOIRS & CONTRÔLER LE MONDE */}
             <button
               onClick={() => onSelectEndingChoice('RULE_WORLD')}
               className="group bg-slate-950/85 hover:bg-rose-950/80 backdrop-blur-xl border-2 border-rose-500/50 hover:border-amber-400 rounded-3xl p-6 text-left transition-all transform hover:scale-[1.03] shadow-[0_0_40px_rgba(244,63,94,0.25)] cursor-pointer flex flex-col justify-between"

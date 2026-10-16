@@ -97,25 +97,25 @@ export const MainMenu: React.FC<MainMenuProps> = ({
       <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-950/80 backdrop-blur-xl p-4 pointer-events-auto">
         <div
           className={`bg-slate-900/95 border rounded-3xl p-8 max-w-md w-full text-center shadow-2xl ${
-            isRuler ? 'border-rose-500/50' : 'border-emerald-500/40'
+            isRuler ? 'border-rose-500/50' : 'border-amber-400/50'
           }`}
         >
           <div
             className={`w-16 h-16 rounded-2xl border flex items-center justify-center mx-auto mb-4 ${
               isRuler
                 ? 'bg-rose-500/20 border-rose-400/40 text-rose-400'
-                : 'bg-emerald-500/20 border-emerald-400/40 text-emerald-400'
+                : 'bg-amber-400/20 border-amber-300/50 text-amber-300'
             }`}
           >
             {isRuler ? <Flame className="w-9 h-9" /> : <Trophy className="w-9 h-9" />}
           </div>
           <h2 className="text-3xl font-black text-white mb-2">
-            {isRuler ? 'Souverain d’Aetheria' : 'Harmonie Restaurée'}
+            {isRuler ? 'Souverain d’Aetheria' : 'Entité Céleste Transcendée'}
           </h2>
           <p className="text-sm text-slate-300 mb-6">
             {isRuler
-              ? 'Après avoir terrassé Malakor, vous avez gardé les 10 Orbes pour vous ! Tous vos pouvoirs divins (Dash Éclair, Contrôle Jour/Nuit, Nova Solaire) restent actifs et les Maraudeurs continuent de vous défier.'
-              : 'Après avoir terrassé Malakor, vous avez rendu les 10 Orbes au Réceptacle pour sauver le monde. Les Maraudeurs ont été purifiés et les terres d’Aetheria sont désormais en paix.'}
+              ? 'Après avoir terrassé Malakor, vous avez gardé les 10 Orbes pour vous ! Tous vos pouvoirs divins restent actifs et les Survivants Humains continuent de vous défier.'
+              : 'Après avoir terrassé Malakor, les 10 Orbes et le Réceptacle ont fusionné avec votre âme. Vous conservez l’intégralité de vos pouvoirs cosmiques divins (Lame de l’Origine, Arc Stellaire, Saut Dimensionnel, Jugement du Cosmos) pour purger les Démons de l’Espace-Temps !'}
           </p>
           <div className="flex flex-col gap-3">
             <button
@@ -123,12 +123,12 @@ export const MainMenu: React.FC<MainMenuProps> = ({
               className={`w-full py-3.5 rounded-2xl font-extrabold text-sm transition-all cursor-pointer ${
                 isRuler
                   ? 'bg-gradient-to-r from-rose-500 to-amber-500 hover:from-rose-400 hover:to-amber-400 text-slate-950'
-                  : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                  : 'bg-gradient-to-r from-amber-300 via-yellow-200 to-cyan-300 hover:from-amber-200 hover:to-cyan-200 text-slate-950 shadow-[0_0_25px_rgba(251,191,36,0.4)]'
               }`}
             >
               {isRuler
                 ? 'Régner sur le Monde (Garder ses Pouvoirs)'
-                : 'Explorer le Monde en Paix'}
+                : 'Incarner l’Entité Céleste (Post-Game Cosmique)'}
             </button>
             {onReplayOutro && (
               <button
