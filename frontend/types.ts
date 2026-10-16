@@ -31,6 +31,8 @@ export interface BossData {
   z: number;
   hp: number;
   maxHp: number;
+  phase?: 1 | 2 | 3;
+  isAlterEgo?: boolean;
 }
 
 export interface CampData {
@@ -121,5 +123,6 @@ export type GameScreen =
   | 'BOSS_CUTSCENE'
   | 'OUTRO_CUTSCENE'
   | 'CLASH_CUTSCENE'
+  | 'COLLAPSE_BREAKTHROUGH'
   | 'GAME_OVER'
   | 'VICTORY';

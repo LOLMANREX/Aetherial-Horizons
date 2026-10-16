@@ -236,19 +236,64 @@ export const HUD: React.FC<HUDProps> = ({
         </div>
 
         {bossActive && (
-          <div className="w-full max-w-lg bg-slate-950/85 backdrop-blur-md border border-rose-500/50 rounded-2xl px-5 py-2.5 shadow-[0_0_30px_rgba(244,63,94,0.3)] flex flex-col items-center">
-            <div className="w-full flex items-center justify-between text-xs font-black tracking-wider uppercase text-rose-300 mb-1.5">
+          <div
+            className={`w-full max-w-xl bg-slate-950/90 backdrop-blur-md border rounded-2xl px-5 py-3 flex flex-col items-center ${
+              world.boss.isAlterEgo
+                ? world.boss.phase === 3
+                  ? 'border-fuchsia-500/80 shadow-[0_0_40px_rgba(217,70,239,0.5)]'
+                  : world.boss.phase === 2
+                  ? 'border-rose-500/75 shadow-[0_0_35px_rgba(244,63,94,0.45)]'
+                  : 'border-purple-500/65 shadow-[0_0_30px_rgba(168,85,247,0.35)]'
+                : 'border-rose-500/50 shadow-[0_0_30px_rgba(244,63,94,0.3)]'
+            }`}
+          >
+            <div className="w-full flex items-center justify-between text-xs font-black tracking-wider uppercase text-rose-300 mb-1.5 gap-2">
               <span className="flex items-center gap-2">
-                <Skull className="w-4 h-4 text-rose-500 animate-bounce" />
-                {world.boss.name}
+                <Skull
+                  className={`w-4 h-4 animate-bounce ${
+                    world.boss.isAlterEgo && world.boss.phase === 3
+                      ? 'text-fuchsia-400'
+                      : 'text-rose-500'
+                  }`}
+                />
+                <span className="text-white drop-shadow-[0_1px_6px_rgba(244,63,94,0.6)]">
+                  {world.boss.name}
+                </span>
+                {world.boss.isAlterEgo && (
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-black border ${
+                      world.boss.phase === 3
+                        ? 'bg-fuchsia-500/25 border-fuchsia-400/60 text-fuchsia-200 animate-pulse'
+                        : world.boss.phase === 2
+                        ? 'bg-rose-500/25 border-rose-400/60 text-rose-200'
+                        : 'bg-purple-500/25 border-purple-400/60 text-purple-200'
+                    }`}
+                  >
+                    PHASE {world.boss.phase || 1} / 3
+                  </span>
+                )}
               </span>
-              <span className="font-mono text-amber-300">
+              <span className="font-mono text-amber-300 shrink-0">
                 {Math.ceil(world.boss.hp)} / {world.boss.maxHp} PV
               </span>
             </div>
-            <div className="w-full h-3 bg-slate-900 rounded-full p-0.5 border border-rose-500/40 overflow-hidden">
+            <div className="w-full h-3.5 bg-slate-900 rounded-full p-0.5 border border-rose-500/40 overflow-hidden relative">
+              {world.boss.isAlterEgo && (
+                <>
+                  <div className="absolute left-[33.33%] top-0 bottom-0 w-0.5 bg-slate-950/90 z-10" />
+                  <div className="absolute left-[66.66%] top-0 bottom-0 w-0.5 bg-slate-950/90 z-10" />
+                </>
+              )}
               <div
-                className="h-full rounded-full bg-gradient-to-r from-rose-600 via-red-500 to-amber-400 transition-all duration-100 shadow-[0_0_12px_#f43f5e]"
+                className={`h-full rounded-full transition-all duration-100 ${
+                  world.boss.isAlterEgo
+                    ? world.boss.phase === 3
+                      ? 'bg-gradient-to-r from-fuchsia-600 via-purple-500 to-rose-400 shadow-[0_0_16px_#d946ef]'
+                      : world.boss.phase === 2
+                      ? 'bg-gradient-to-r from-rose-700 via-red-500 to-fuchsia-400 shadow-[0_0_14px_#f43f5e]'
+                      : 'bg-gradient-to-r from-purple-700 via-rose-600 to-red-400 shadow-[0_0_12px_#a855f7]'
+                    : 'bg-gradient-to-r from-rose-600 via-red-500 to-amber-400 shadow-[0_0_12px_#f43f5e]'
+                }`}
                 style={{
                   width: `${Math.max(
                     0,
@@ -258,7 +303,13 @@ export const HUD: React.FC<HUDProps> = ({
               />
             </div>
             <div className="text-[10px] text-slate-300 mt-1 font-medium">
-              Terrassez le Boss pour récupérer le Réceptacle des 10 Orbes et débloquer le choix final !
+              {world.boss.isAlterEgo
+                ? world.boss.phase === 3
+                  ? 'Phase 3 (Frénésie Totale) : Téléportations imprévisibles, distorsion spatio-temporelle et failles du Néant !'
+                  : world.boss.phase === 2
+                  ? 'Phase 2 (Tempête Écarlate) : Esquivez les indicateurs au sol avant l’impact des éclairs écarlates !'
+                  : 'Phase 1 (Duel d’Ombre) : Attention à ses dashs éclairs et à ses contre-attaques sur vos tirs d’arc !'
+                : 'Terrassez le Boss pour récupérer le Réceptacle des 10 Orbes et débloquer le choix final !'}
             </div>
           </div>
         )}

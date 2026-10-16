@@ -22,6 +22,7 @@ export interface HumanoidCharacter {
     isSeatedOnThrone?: boolean;
     isCorrupted?: boolean;
     isCelestial?: boolean;
+    glitchIntensity?: number;
   }) => void;
 }
 
@@ -899,7 +900,35 @@ export function createHumanoidCharacter(): HumanoidCharacter {
     tendril.rotation.z = Math.sin(a) * 0.4;
     voidShadowAuraGroup.add(tendril);
   }
+  const lightningArcsGroup = new THREE.Group();
+  for (let i = 0; i < 6; i++) {
+    const arcGeo = new THREE.BoxGeometry(0.035, 0.52, 0.035);
+    const arc = new THREE.Mesh(arcGeo, purpleLightningMat);
+    const a = (i / 6) * Math.PI * 2;
+    arc.position.set(Math.cos(a) * 0.54, (i % 3 - 1) * 0.22, Math.sin(a) * 0.54);
+    arc.rotation.z = 0.35 * (i % 2 === 0 ? 1 : -1);
+    lightningArcsGroup.add(arc);
+  }
+  voidShadowAuraGroup.add(lightningArcsGroup);
   torsoPivot.add(voidShadowAuraGroup);
+
+  const glitchSliceGroup = new THREE.Group();
+  glitchSliceGroup.visible = false;
+  const glitchColors = [0xd946ef, 0x38bdf8, 0xf43f5e, 0xa855f7];
+  for (let i = 0; i < 6; i++) {
+    const sMat = new THREE.MeshBasicMaterial({
+      color: glitchColors[i % glitchColors.length],
+      transparent: true,
+      opacity: 0.65,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const sliceMesh = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.04, 0.55), sMat);
+    sliceMesh.position.set(0, -0.6 + i * 0.28, 0);
+    glitchSliceGroup.add(sliceMesh);
+  }
+  bodyPivot.add(glitchSliceGroup);
 
   let walkCycle = 0;
 
@@ -921,6 +950,7 @@ export function createHumanoidCharacter(): HumanoidCharacter {
     isSeatedOnThrone = false,
     isCorrupted = false,
     isCelestial = false,
+    glitchIntensity = 0,
   }: {
     dt: number;
     time: number;
@@ -939,6 +969,7 @@ export function createHumanoidCharacter(): HumanoidCharacter {
     isSeatedOnThrone?: boolean;
     isCorrupted?: boolean;
     isCelestial?: boolean;
+    glitchIntensity?: number;
   }) => {
     const tSec = time * 0.001;
 
@@ -952,6 +983,9 @@ export function createHumanoidCharacter(): HumanoidCharacter {
       backHaloRing.rotation.z = tSec * 1.4;
       innerHaloRing.rotation.z = -tSec * 2.2;
       eyeMat.color.setHex(0xfef08a);
+      skinMat.color.setHex(0xfff7ed);
+      skinMat.emissive.setHex(0xfef08a);
+      skinMat.emissiveIntensity = 0.2;
       tunicMat.color.setHex(0xffffff);
       tunicMat.emissive.setHex(0xfef08a);
       tunicMat.emissiveIntensity = 0.65;
@@ -975,7 +1009,16 @@ export function createHumanoidCharacter(): HumanoidCharacter {
       shadowRing1.rotation.z = -tSec * 3.1;
       shadowRing2.rotation.x = tSec * 2.8;
       voidShadowAuraGroup.position.y = 0.32 + Math.sin(tSec * 4.5) * 0.08;
+      lightningArcsGroup.rotation.y = -tSec * 4.2;
+      lightningArcsGroup.children.forEach((child, idx) => {
+        const pulse = Math.sin(tSec * 18 + idx * 2.3);
+        child.scale.set(1.0 + pulse * 0.4, 1.0 + pulse * 0.6, 1.0 + pulse * 0.4);
+        child.visible = pulse > -0.5;
+      });
       eyeMat.color.setHex(0xff1744);
+      skinMat.color.setHex(0x06020c);
+      skinMat.emissive.setHex(0x180324);
+      skinMat.emissiveIntensity = 0.45;
       tunicMat.color.setHex(0x090314);
       tunicMat.emissive.setHex(0x3b0764);
       tunicMat.emissiveIntensity = 0.55;
@@ -995,6 +1038,9 @@ export function createHumanoidCharacter(): HumanoidCharacter {
       crystalMat.emissiveIntensity = 2.4;
     } else {
       eyeMat.color.setHex(0x0f172a);
+      skinMat.color.setHex(0xf4c29f);
+      skinMat.emissive.setHex(0x000000);
+      skinMat.emissiveIntensity = 0;
       tunicMat.color.setHex(0x0f4c81);
       tunicMat.emissive.setHex(0x000000);
       armorTrimMat.color.setHex(0x38bdf8);
@@ -1008,6 +1054,38 @@ export function createHumanoidCharacter(): HumanoidCharacter {
       crystalMat.color.setHex(0x22d3ee);
       crystalMat.emissive.setHex(0x06b6d4);
       crystalMat.emissiveIntensity = 1.8;
+    }
+
+    if (glitchIntensity > 0) {
+      glitchSliceGroup.visible = true;
+      glitchSliceGroup.children.forEach((slice, idx) => {
+        const jx = Math.sin(tSec * 45 + idx * 17.3);
+        const jz = Math.cos(tSec * 52 + idx * 23.7);
+        slice.position.x = jx * 0.32 * glitchIntensity;
+        slice.position.z = jz * 0.22 * glitchIntensity;
+        slice.scale.x = 1.0 + Math.sin(tSec * 30 + idx * 11) * 0.5 * glitchIntensity;
+        slice.visible = Math.sin(tSec * 25 + idx * 5) > -0.4;
+      });
+      if (Math.sin(tSec * 50) > 0.45) {
+        bodyPivot.position.x = Math.sin(tSec * 90) * 0.28 * glitchIntensity;
+        bodyPivot.position.z = Math.cos(tSec * 110) * 0.22 * glitchIntensity;
+        headPivot.position.x = Math.cos(tSec * 120) * 0.32 * glitchIntensity;
+      } else {
+        bodyPivot.position.x = 0;
+        bodyPivot.position.z = 0;
+        headPivot.position.x = 0;
+      }
+      if (Math.sin(tSec * 28) > 0.35) {
+        tunicMat.emissive.setHex(0xd946ef);
+        tunicMat.emissiveIntensity = 1.6;
+        skinMat.emissive.setHex(0xa855f7);
+        skinMat.emissiveIntensity = 1.4;
+      }
+    } else {
+      glitchSliceGroup.visible = false;
+      bodyPivot.position.x = 0;
+      bodyPivot.position.z = 0;
+      headPivot.position.x = 0;
     }
 
     if (isSeatedOnThrone) {

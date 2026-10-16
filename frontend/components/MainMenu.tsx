@@ -51,6 +51,10 @@ interface MainMenuProps {
   onResetAllSaves?: () => void;
   onRetryGameOver?: () => void;
   onForceGameOver?: () => void;
+  onSpawnBossPhase1?: () => void;
+  onForceBossPhase2?: () => void;
+  onForceBossPhase3?: () => void;
+  onForceBossZeroHp?: () => void;
 }
 
 export const MainMenu: React.FC<MainMenuProps> = ({
@@ -79,6 +83,10 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   onResetAllSaves,
   onRetryGameOver,
   onForceGameOver,
+  onSpawnBossPhase1,
+  onForceBossPhase2,
+  onForceBossPhase3,
+  onForceBossZeroHp,
 }) => {
   const [activeTab, setActiveTab] = useState<'MAIN' | 'SAVES' | 'CONTROLS'>('MAIN');
   const [savedToastSlot, setSavedToastSlot] = useState<number | null>(null);
@@ -128,6 +136,53 @@ export const MainMenu: React.FC<MainMenuProps> = ({
     setSavedToastSlot(slotId);
     setTimeout(() => setSavedToastSlot(null), 2000);
   };
+
+  if (screen === 'COLLAPSE_BREAKTHROUGH') {
+    return (
+      <div className="fixed inset-0 z-40 flex flex-col justify-between p-6 sm:p-10 pointer-events-auto">
+        <div className="flex justify-center">
+          <div className="bg-slate-950/90 border border-fuchsia-500/60 rounded-2xl px-6 py-3 text-center shadow-[0_0_45px_rgba(217,70,239,0.45)] backdrop-blur-xl">
+            <div className="text-[10px] font-mono font-black uppercase tracking-[0.35em] text-fuchsia-400 animate-pulse">
+              EVENT :: COLLAPSE_BREAKTHROUGH
+            </div>
+            <div className="text-sm sm:text-base font-black text-white mt-0.5">
+              ANOMALIE DU 4ÈME MUR : CONVERGENCE DES DEUX AVATARS
+            </div>
+          </div>
+        </div>
+
+        <div className="max-w-2xl w-full mx-auto bg-slate-950/92 border border-fuchsia-500/50 rounded-3xl p-6 sm:p-8 text-center shadow-[0_0_80px_rgba(168,85,247,0.35)] backdrop-blur-xl space-y-4">
+          <p className="text-xs font-mono uppercase tracking-[0.25em] text-amber-300">
+            Entité Céleste &amp; Souverain du Néant — Synchronisation 100%
+          </p>
+          <h2 className="text-2xl sm:text-3xl font-black text-white leading-tight">
+            « Pourquoi nous battons-nous... alors que quelqu&apos;un d&apos;autre tient les commandes derrière cet écran ? »
+          </h2>
+          <p className="text-sm text-slate-300 leading-relaxed">
+            À 0% PV, votre reflet du Néant refuse de disparaître. Les deux avatars ont cessé le combat et se tiennent côte à côte au centre de l&apos;arène, le regard braqué droit vers vous.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            {onSpawnBossPhase1 && (
+              <button
+                onClick={onSpawnBossPhase1}
+                className="px-5 py-3 rounded-2xl bg-gradient-to-r from-fuchsia-500 via-rose-500 to-amber-400 hover:from-fuchsia-400 hover:to-amber-300 text-slate-950 font-extrabold text-xs flex items-center gap-2 shadow-lg cursor-pointer"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Relancer le Combat (Phase 1)
+              </button>
+            )}
+            <button
+              onClick={onReturnToMainMenu}
+              className="px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-slate-200 font-bold text-xs flex items-center gap-2 border border-slate-700 cursor-pointer"
+            >
+              <Home className="w-4 h-4" />
+              Menu Principal
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (screen === 'GAME_OVER') {
     return (
@@ -738,6 +793,64 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                       Tester cinématique Clash Dimensionnel
                     </button>
                   )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                    {onSpawnBossPhase1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsOptionsOpen(false);
+                          onSpawnBossPhase1();
+                        }}
+                        className="py-2.5 px-3 rounded-xl bg-purple-950/85 hover:bg-purple-900/85 text-purple-200 border border-purple-500/50 font-extrabold text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <Flame className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                        Spawn Boss Phase 1
+                      </button>
+                    )}
+
+                    {onForceBossPhase2 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsOptionsOpen(false);
+                          onForceBossPhase2();
+                        }}
+                        className="py-2.5 px-3 rounded-xl bg-rose-950/85 hover:bg-rose-900/85 text-rose-200 border border-rose-500/50 font-extrabold text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <Flame className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                        Forcer Boss Phase 2
+                      </button>
+                    )}
+
+                    {onForceBossPhase3 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsOptionsOpen(false);
+                          onForceBossPhase3();
+                        }}
+                        className="py-2.5 px-3 rounded-xl bg-fuchsia-950/85 hover:bg-fuchsia-900/85 text-fuchsia-200 border border-fuchsia-500/50 font-extrabold text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-fuchsia-400 shrink-0" />
+                        Forcer Boss Phase 3
+                      </button>
+                    )}
+
+                    {onForceBossZeroHp && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsOptionsOpen(false);
+                          onForceBossZeroHp();
+                        }}
+                        className="py-2.5 px-3 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/50 font-extrabold text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <Skull className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                        Forcer 0% PV Boss (Déclencher Fin)
+                      </button>
+                    )}
+                  </div>
 
                   {onForceGameOver && (
                     <button

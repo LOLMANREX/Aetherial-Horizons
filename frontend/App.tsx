@@ -108,6 +108,8 @@ interface VisualEffect3D {
   mesh: THREE.Object3D;
   age: number;
   maxAge: number;
+  targetX?: number;
+  targetZ?: number;
   type:
     | 'LIGHTNING'
     | 'NOVA_RING'
@@ -115,7 +117,9 @@ interface VisualEffect3D {
     | 'SKY_VORTEX'
     | 'REALITY_RIFT'
     | 'SUPERNOVA'
-    | 'CONSTELLATION_TRAIL';
+    | 'CONSTELLATION_TRAIL'
+    | 'SCARLET_TELEGRAPH'
+    | 'SCARLET_LIGHTNING_PILLAR';
 }
 
 function generateInitialOrbs(seedOffset = 0): OrbData[] {
@@ -269,6 +273,12 @@ export function App() {
     divineInvulnTimer: 0,
     endingChoice: 'NONE' as EndingChoice,
     isDimensionalClashActive: false,
+    alterEgoPhase: 1 as 1 | 2 | 3,
+    alterEgoDashCooldown: 0,
+    alterEgoLightningCooldown: 0,
+    alterEgoTeleportCooldown: 0,
+    alterEgoRiftCooldown: 0,
+    alterEgoComboStep: 0,
     alterEgoHumanoid: null as HumanoidCharacter | null,
     visualEffects: [] as VisualEffect3D[],
     exhaustedCooldown: false,
@@ -311,6 +321,10 @@ export function App() {
     mouseNDC: { x: 0, y: 0 },
     isMouseInsideWindow: true,
   });
+
+  const bossDamageHandlerRef = useRef<
+    ((damage: number, knockDirX: number, knockDirZ: number) => void) | null
+  >(null);
 
   const showToast = useCallback((msg: string) => {
     setRecentCollectName(msg);
@@ -755,11 +769,13 @@ export function App() {
       orbs: completedOrbs,
       boss: {
         ...prev.boss,
-        name: 'Souverain du Néant (Alter Ego)',
+        name: "L'Autre Réalité - Souverain du Néant",
         active: false,
         defeated: false,
         hp: 2400,
         maxHp: 2400,
+        phase: 1,
+        isAlterEgo: true,
       },
     }));
 
@@ -769,6 +785,208 @@ export function App() {
     soundFX.playCinematicChord(0, true);
     updateScreen('CLASH_CUTSCENE');
   }, [exitLockSafe, syncOrbMeshesWithState, updateScreen]);
+
+  const triggerCollapseBreakthrough = useCallback(() => {
+    const st = gameRef.current;
+    exitLockSafe();
+
+    const cY = getTerrainHeight(0, 0);
+    st.keys = {};
+    st.isDrawingBow = false;
+    st.bowDrawProgress = 0;
+    st.attackTimer = 0;
+    st.playerVel.set(0, 0, 0);
+    st.playerPos.set(-1.4, cY + 1.2, 0);
+    st.yaw = Math.PI;
+    st.pitch = 0;
+    st.isDimensionalClashActive = true;
+    st.alterEgoPhase = 3;
+    st.visualEffects = [];
+
+    if (st.bossInstance) {
+      st.bossInstance.hp = 0;
+      st.bossInstance.active = false;
+      st.bossInstance.defeated = false;
+      st.bossInstance.position.set(1.4, cY, 0);
+      st.bossInstance.group.position.set(1.4, cY, 0);
+      st.bossInstance.group.visible = false;
+    }
+
+    if (st.alterEgoHumanoid) {
+      st.alterEgoHumanoid.group.visible = true;
+      st.alterEgoHumanoid.group.position.set(1.4, cY, 0);
+      st.alterEgoHumanoid.group.rotation.set(0, Math.PI, 0);
+      st.alterEgoHumanoid.group.scale.set(1.4, 1.4, 1.4);
+    }
+
+    st.enemyInstances.forEach((enemy) => {
+      enemy.alive = false;
+      enemy.group.visible = false;
+    });
+
+    setWorldState((prev) => ({
+      ...prev,
+      boss: {
+        ...prev.boss,
+        name: "L'Autre Réalité - Souverain du Néant",
+        active: false,
+        defeated: false,
+        hp: 0,
+        maxHp: 2400,
+        phase: 3,
+        isAlterEgo: true,
+      },
+    }));
+
+    soundFX.init();
+    soundFX.playVoidDimensionSeal();
+    soundFX.playCinematicChord(2, true);
+    showToast('COLLAPSE_BREAKTHROUGH : Les deux avatars refusent de disparaître et brisent le 4ème mur !');
+    updateScreen('COLLAPSE_BREAKTHROUGH');
+  }, [exitLockSafe, showToast, updateScreen]);
+
+  const setupAlterEgoArena = useCallback(
+    (targetPhase: 1 | 2 | 3) => {
+      const st = gameRef.current;
+      const completedOrbs = (
+        st.orbs.length > 0 ? st.orbs : generateInitialOrbs(st.activeSlot * 137)
+      ).map((o) => ({
+        ...o,
+        collected: true,
+      }));
+
+      const cY = getTerrainHeight(0, 0);
+      const fightStartZ = 24;
+      const fightStartY = getTerrainHeight(0, fightStartZ) + 2.0;
+
+      st.orbs = completedOrbs;
+      st.playerPos.set(0, fightStartY, fightStartZ);
+      st.playerVel.set(0, 0, 0);
+      st.yaw = 0;
+      st.pitch = 0.05;
+      st.health = 100;
+      st.stamina = 100;
+      st.oxygen = 100;
+      st.arrows = 20;
+      st.equippedWeapon = 'SWORD';
+      st.isDrawingBow = false;
+      st.bowDrawProgress = 0;
+      st.dashCooldownTimer = 0;
+      st.novaCooldownTimer = 0;
+      st.divineInvulnTimer = 0;
+      st.endingChoice = 'SAVE_WORLD';
+      st.isDimensionalClashActive = true;
+      st.alterEgoPhase = targetPhase;
+      st.alterEgoDashCooldown = 1.2;
+      st.alterEgoLightningCooldown = 1.5;
+      st.alterEgoTeleportCooldown = 1.2;
+      st.alterEgoComboStep = 0;
+      st.timeOfDay = 15.0;
+      st.keys = {};
+
+      const maxHp = 2400;
+      const targetHp =
+        targetPhase === 1
+          ? maxHp
+          : targetPhase === 2
+          ? Math.round(maxHp * 0.65)
+          : Math.round(maxHp * 0.32);
+
+      if (st.sovereignThrone) {
+        st.sovereignThrone.group.visible = true;
+        st.sovereignThrone.group.position.set(0, cY, 0);
+      }
+      if (st.finaleMonumentGroup) {
+        st.finaleMonumentGroup.visible = true;
+      }
+      if (st.purificationWaveMesh) {
+        st.purificationWaveMesh.visible = false;
+      }
+      if (st.fallingReceptacleMesh) {
+        st.fallingReceptacleMesh.visible = false;
+      }
+
+      if (st.bossInstance) {
+        st.bossInstance.active = true;
+        st.bossInstance.defeated = false;
+        st.bossInstance.maxHp = maxHp;
+        st.bossInstance.hp = targetHp;
+        st.bossInstance.position.set(0, cY, 0);
+        st.bossInstance.group.position.set(0, cY, 0);
+        st.bossInstance.group.visible = false;
+        st.bossInstance.attackCooldown = 0.8;
+        st.bossInstance.slamCooldown = 2.0;
+      }
+
+      if (st.alterEgoHumanoid) {
+        st.alterEgoHumanoid.group.visible = true;
+        st.alterEgoHumanoid.group.position.set(0, cY, 0);
+        st.alterEgoHumanoid.group.scale.set(1.4, 1.4, 1.4);
+      }
+
+      st.enemyInstances.forEach((enemy) => {
+        enemy.alive = false;
+        enemy.group.visible = false;
+      });
+
+      syncOrbMeshesWithState(completedOrbs);
+      setEndingChoice('SAVE_WORLD');
+
+      setPlayerStats((prev) => ({
+        ...prev,
+        health: 100,
+        stamina: 100,
+        oxygen: 100,
+        arrows: 20,
+        equippedWeapon: 'SWORD',
+        activePowersCount: completedOrbs.length,
+        endingChoice: 'SAVE_WORLD',
+      }));
+
+      setWorldState((prev) => ({
+        ...prev,
+        orbsCollected: completedOrbs.length,
+        totalOrbs: completedOrbs.length,
+        enemyTier: 1 + completedOrbs.length,
+        orbs: completedOrbs,
+        boss: {
+          ...prev.boss,
+          name: "L'Autre Réalité - Souverain du Néant",
+          active: true,
+          defeated: false,
+          hp: targetHp,
+          maxHp,
+          phase: targetPhase,
+          isAlterEgo: true,
+        },
+      }));
+
+      soundFX.init();
+      soundFX.playBossRoar();
+      updateScreen('PLAYING');
+      requestLockSafe();
+    },
+    [requestLockSafe, syncOrbMeshesWithState, updateScreen]
+  );
+
+  const handleSpawnBossPhase1 = useCallback(() => {
+    setupAlterEgoArena(1);
+    showToast("BOSS FINAL (PHASE 1) : L'Autre Réalité - Souverain du Néant !");
+  }, [setupAlterEgoArena, showToast]);
+
+  const handleForceBossPhase2 = useCallback(() => {
+    setupAlterEgoArena(2);
+    showToast("BOSS FINAL (PHASE 2) : L'Autre Réalité - Tempête Écarlate !");
+  }, [setupAlterEgoArena, showToast]);
+
+  const handleForceBossPhase3 = useCallback(() => {
+    setupAlterEgoArena(3);
+    showToast("BOSS FINAL (PHASE 3) : L'Autre Réalité - Frénésie Totale & Glitch !");
+  }, [setupAlterEgoArena, showToast]);
+
+  const handleForceBossZeroHp = useCallback(() => {
+    triggerCollapseBreakthrough();
+  }, [triggerCollapseBreakthrough]);
 
   const handleSimulateBadEndingCompleted = useCallback(() => {
     const nextState = SaveManager.setBadEndingCompleted(true);
@@ -790,6 +1008,7 @@ export function App() {
     }
     setSaves(getAllSaves());
     gameRef.current.isDimensionalClashActive = false;
+    gameRef.current.alterEgoPhase = 1;
     if (gameRef.current.alterEgoHumanoid) {
       gameRef.current.alterEgoHumanoid.group.visible = false;
     }
@@ -840,6 +1059,11 @@ export function App() {
       st.playerPos.set(0, getTerrainHeight(0, fightStartZ) + 2.0, fightStartZ);
       st.yaw = 0;
       st.pitch = 0.05;
+      st.alterEgoPhase = 1;
+      st.alterEgoDashCooldown = 1.4;
+      st.alterEgoLightningCooldown = 2.0;
+      st.alterEgoTeleportCooldown = 1.5;
+      st.alterEgoComboStep = 0;
       if (st.bossInstance) {
         const cY = getTerrainHeight(0, 0);
         st.bossInstance.active = true;
@@ -854,6 +1078,7 @@ export function App() {
         const cY = getTerrainHeight(0, 0);
         st.alterEgoHumanoid.group.visible = true;
         st.alterEgoHumanoid.group.position.set(0, cY, 0);
+        st.alterEgoHumanoid.group.scale.set(1.4, 1.4, 1.4);
       }
     } else if (st.bossInstance && st.bossInstance.active && !st.bossInstance.defeated) {
       const fightStartZ = 34;
@@ -1036,6 +1261,7 @@ export function App() {
       gameRef.current.divineInvulnTimer = 0;
       gameRef.current.endingChoice = 'NONE';
       gameRef.current.isDimensionalClashActive = false;
+      gameRef.current.alterEgoPhase = 1;
       gameRef.current.timeOfDay = 8.5;
       gameRef.current.keys = {};
       gameRef.current.cutsceneStepTimer = 0;
@@ -1087,6 +1313,8 @@ export function App() {
           defeated: false,
           hp: 1200,
           maxHp: 1200,
+          phase: 1,
+          isAlterEgo: false,
         },
       }));
 
@@ -1169,6 +1397,11 @@ export function App() {
       st.dashCooldownTimer = 0;
       st.novaCooldownTimer = 0;
       st.isDimensionalClashActive = true;
+      st.alterEgoPhase = 1;
+      st.alterEgoDashCooldown = 1.4;
+      st.alterEgoLightningCooldown = 2.0;
+      st.alterEgoTeleportCooldown = 1.5;
+      st.alterEgoComboStep = 0;
 
       if (st.bossInstance) {
         const cY = getTerrainHeight(0, 0);
@@ -1185,10 +1418,16 @@ export function App() {
         const cY = getTerrainHeight(0, 0);
         st.alterEgoHumanoid.group.visible = true;
         st.alterEgoHumanoid.group.position.set(0, cY, 0);
+        st.alterEgoHumanoid.group.scale.set(1.4, 1.4, 1.4);
       }
 
+      st.enemyInstances.forEach((enemy) => {
+        enemy.alive = false;
+        enemy.group.visible = false;
+      });
+
       performSave(st.activeSlot);
-      showToast('COLLISION MULTIVERSELLE : Affrontez votre Alter Ego du Néant !');
+      showToast("COLLISION MULTIVERSELLE : Affrontez L'Autre Réalité - Souverain du Néant !");
       updateScreen('PLAYING');
       requestLockSafe();
     } else if (currentScreen === 'OUTRO_CUTSCENE') {
@@ -1554,14 +1793,18 @@ export function App() {
         boss.position.distanceTo(endPos) < 7.5 ||
         boss.position.distanceTo(startPos) < 7.5
       ) {
-        boss.hp = Math.max(0, boss.hp - dashDmg);
-        soundFX.playEnemyHit(boss.hp <= 0);
-        if (boss.hp <= 0) {
-          boss.defeated = true;
-          boss.active = false;
-          boss.group.visible = false;
-          showToast('MALAKOR VAINCU ! Le Réceptacle des 10 Orbes est libéré !');
-          startOutroCutscene();
+        if (st.isDimensionalClashActive && bossDamageHandlerRef.current) {
+          bossDamageHandlerRef.current(dashDmg, dashDir.x, dashDir.z);
+        } else {
+          boss.hp = Math.max(0, boss.hp - dashDmg);
+          soundFX.playEnemyHit(boss.hp <= 0);
+          if (boss.hp <= 0) {
+            boss.defeated = true;
+            boss.active = false;
+            boss.group.visible = false;
+            showToast('MALAKOR VAINCU ! Le Réceptacle des 10 Orbes est libéré !');
+            startOutroCutscene();
+          }
         }
       }
     }
@@ -1837,15 +2080,19 @@ export function App() {
       );
       if (distBoss < 17.0) {
         hitCount++;
-        boss.hp = Math.max(0, boss.hp - novaDamage);
-        if (boss.hp <= 0) {
-          boss.defeated = true;
-          boss.active = false;
-          boss.group.visible = false;
-          soundFX.playEnemyHit(true);
-          showToast('MALAKOR VAINCU ! Le Réceptacle des 10 Orbes est libéré !');
-          startOutroCutscene();
-          return;
+        if (st.isDimensionalClashActive && bossDamageHandlerRef.current) {
+          bossDamageHandlerRef.current(novaDamage, 0, 0);
+        } else {
+          boss.hp = Math.max(0, boss.hp - novaDamage);
+          if (boss.hp <= 0) {
+            boss.defeated = true;
+            boss.active = false;
+            boss.group.visible = false;
+            soundFX.playEnemyHit(true);
+            showToast('MALAKOR VAINCU ! Le Réceptacle des 10 Orbes est libéré !');
+            startOutroCutscene();
+            return;
+          }
         }
       }
     }
@@ -2850,25 +3097,88 @@ export function App() {
       boss.velocity.x += knockDirX * 4;
       boss.velocity.z += knockDirZ * 4;
 
-      if (boss.hp <= 0) {
-        boss.defeated = true;
-        boss.active = false;
-        boss.group.visible = false;
-        soundFX.playEnemyHit(true);
-        if (gameRef.current.isDimensionalClashActive) {
-          if (gameRef.current.alterEgoHumanoid) {
-            gameRef.current.alterEgoHumanoid.group.visible = false;
-          }
-          gameRef.current.isDimensionalClashActive = false;
-          showToast('ALTER EGO DU NÉANT VAINCU ! Le Multivers est réunifié !');
-          exitLockSafe();
-          updateScreen('VICTORY');
-        } else {
+      if (gameRef.current.isDimensionalClashActive) {
+        if (boss.hp <= 0) {
+          triggerCollapseBreakthrough();
+          return;
+        }
+        if (gameRef.current.alterEgoPhase === 1 && boss.hp <= boss.maxHp * 0.66) {
+          gameRef.current.alterEgoPhase = 2;
+          soundFX.playNovaBlast();
+          soundFX.playBossRoar();
+          const pX = gameRef.current.playerPos.x - boss.position.x;
+          const pZ = gameRef.current.playerPos.z - boss.position.z;
+          const pDist = Math.hypot(pX, pZ);
+          const pDirX = pX / Math.max(0.001, pDist);
+          const pDirZ = pZ / Math.max(0.001, pDist);
+          gameRef.current.playerVel.x += pDirX * 24;
+          gameRef.current.playerVel.z += pDirZ * 24;
+          gameRef.current.playerVel.y = 8.5;
+          const burstMesh = new THREE.Mesh(
+            new THREE.RingGeometry(1.2, 5.5, 32),
+            new THREE.MeshBasicMaterial({
+              color: 0xf43f5e,
+              transparent: true,
+              opacity: 0.95,
+              side: THREE.DoubleSide,
+              blending: THREE.AdditiveBlending,
+              depthWrite: false,
+            })
+          );
+          burstMesh.rotation.x = -Math.PI / 2;
+          burstMesh.position.set(boss.position.x, boss.position.y + 0.4, boss.position.z);
+          scene.add(burstMesh);
+          gameRef.current.visualEffects.push({
+            mesh: burstMesh,
+            age: 0,
+            maxAge: 0.7,
+            type: 'BOSS_SLAM_RING',
+          });
+          showToast("TRANSITION PHASE 2 : L'Autre Réalité déchaîne la Tempête Écarlate !");
+        } else if (gameRef.current.alterEgoPhase === 2 && boss.hp <= boss.maxHp * 0.33) {
+          gameRef.current.alterEgoPhase = 3;
+          soundFX.playVoidDimensionSeal();
+          soundFX.playBossRoar();
+          const burstMesh = new THREE.Mesh(
+            new THREE.RingGeometry(1.5, 6.5, 32),
+            new THREE.MeshBasicMaterial({
+              color: 0xd946ef,
+              transparent: true,
+              opacity: 0.95,
+              side: THREE.DoubleSide,
+              blending: THREE.AdditiveBlending,
+              depthWrite: false,
+            })
+          );
+          burstMesh.rotation.x = -Math.PI / 2;
+          burstMesh.position.set(boss.position.x, boss.position.y + 0.4, boss.position.z);
+          scene.add(burstMesh);
+          gameRef.current.visualEffects.push({
+            mesh: burstMesh,
+            age: 0,
+            maxAge: 0.75,
+            type: 'NOVA_RING',
+          });
+          showToast("TRANSITION PHASE 3 : Frénésie Totale - Rupture Dimensionnelle !");
+        }
+        soundFX.playEnemyHit(false);
+      } else {
+        if (boss.hp <= 0) {
+          boss.defeated = true;
+          boss.active = false;
+          boss.group.visible = false;
+          soundFX.playEnemyHit(true);
           showToast('MALAKOR TERRASSÉ ! Le Réceptacle des 10 Orbes est à vous !');
           startOutroCutscene();
+        } else {
+          soundFX.playEnemyHit(false);
         }
-      } else {
-        soundFX.playEnemyHit(false);
+      }
+    };
+
+    bossDamageHandlerRef.current = (dmg, kX, kZ) => {
+      if (gameRef.current.bossInstance) {
+        damageBoss(gameRef.current.bossInstance, dmg, kX, kZ);
       }
     };
 
@@ -2990,9 +3300,34 @@ export function App() {
           const beamScale = Math.max(0.05, 1 - p * 0.8);
           fx.mesh.scale.set(beamScale, 1, beamScale);
         } else if (fx.type === 'REALITY_RIFT') {
-          const riftScale = p < 0.3 ? p / 0.3 : 1 + (p - 0.3) * 0.8;
-          fx.mesh.scale.set(riftScale, riftScale, riftScale);
-          fx.mesh.rotation.y += dt * 1.8;
+          const riftScale = p < 0.2 ? p / 0.2 : 1.0;
+          fx.mesh.scale.set(riftScale, riftScale, 1);
+          fx.mesh.rotation.z += dt * 3.5;
+          if (fx.targetX !== undefined && fx.targetZ !== undefined) {
+            const distToRift = Math.hypot(
+              state.playerPos.x - fx.targetX,
+              state.playerPos.z - fx.targetZ
+            );
+            if (distToRift < 3.4 && state.divineInvulnTimer <= 0) {
+              state.health = Math.max(0, state.health - dt * 26);
+              state.playerVel.x *= 0.88;
+              state.playerVel.z *= 0.88;
+              if (Math.sin(fx.age * 12) > 0.8) {
+                soundFX.playPlayerHurt();
+              }
+            }
+          }
+        } else if (fx.type === 'SCARLET_TELEGRAPH') {
+          const pulse = Math.sin(fx.age * 16) * 0.25 + 0.75;
+          const mat = (fx.mesh as THREE.Mesh).material as THREE.MeshBasicMaterial;
+          mat.opacity = pulse;
+          const s = 1.0 + Math.sin(fx.age * 8) * 0.08;
+          fx.mesh.scale.set(s, s, 1);
+        } else if (fx.type === 'SCARLET_LIGHTNING_PILLAR') {
+          const mat = (fx.mesh as THREE.Mesh).material as THREE.MeshBasicMaterial;
+          mat.opacity = Math.max(0, (1 - p) * 0.95);
+          fx.mesh.scale.x = 1.0 + p * 1.5;
+          fx.mesh.scale.z = 1.0 + p * 1.5;
         } else if (fx.type === 'SUPERNOVA') {
           const novaScale = 1 + p * 11.5;
           fx.mesh.scale.set(novaScale, novaScale, novaScale);
@@ -3001,6 +3336,60 @@ export function App() {
           fx.mesh.position.y += dt * 0.6;
         }
         if (fx.age >= fx.maxAge) {
+          if (fx.type === 'SCARLET_TELEGRAPH' && fx.targetX !== undefined && fx.targetZ !== undefined) {
+            const tY = getTerrainHeight(fx.targetX, fx.targetZ);
+            const boltGeo = new THREE.CylinderGeometry(0.55, 0.75, 75, 12);
+            const boltMat = new THREE.MeshBasicMaterial({
+              color: 0xff1744,
+              transparent: true,
+              opacity: 0.95,
+              side: THREE.DoubleSide,
+              blending: THREE.AdditiveBlending,
+              depthWrite: false,
+            });
+            const boltMesh = new THREE.Mesh(boltGeo, boltMat);
+            boltMesh.position.set(fx.targetX, tY + 37.5, fx.targetZ);
+            scene.add(boltMesh);
+            state.visualEffects.push({
+              mesh: boltMesh,
+              age: 0,
+              maxAge: 0.38,
+              type: 'SCARLET_LIGHTNING_PILLAR',
+            });
+
+            const impactRingGeo = new THREE.RingGeometry(0.8, 4.2, 32);
+            impactRingGeo.rotateX(-Math.PI / 2);
+            const impactRingMat = new THREE.MeshBasicMaterial({
+              color: 0xff1744,
+              transparent: true,
+              opacity: 0.9,
+              side: THREE.DoubleSide,
+              blending: THREE.AdditiveBlending,
+              depthWrite: false,
+            });
+            const impactMesh = new THREE.Mesh(impactRingGeo, impactRingMat);
+            impactMesh.position.set(fx.targetX, tY + 0.15, fx.targetZ);
+            scene.add(impactMesh);
+            state.visualEffects.push({
+              mesh: impactMesh,
+              age: 0,
+              maxAge: 0.5,
+              type: 'BOSS_SLAM_RING',
+            });
+
+            soundFX.playNovaBlast();
+            soundFX.playLightningDash();
+
+            const distToBolt = Math.hypot(
+              state.playerPos.x - fx.targetX,
+              state.playerPos.z - fx.targetZ
+            );
+            if (distToBolt < 3.6 && state.divineInvulnTimer <= 0) {
+              state.health = Math.max(0, state.health - 32);
+              state.playerVel.y = 8.5;
+              soundFX.playPlayerHurt();
+            }
+          }
           scene.remove(fx.mesh);
           state.visualEffects.splice(i, 1);
         }
@@ -3641,6 +4030,71 @@ export function App() {
         return;
       }
 
+      if (state.screen === 'COLLAPSE_BREAKTHROUGH') {
+        playerGroup.visible = true;
+        fpViewModel.group.visible = false;
+        alterEgo.group.visible = true;
+        alterEgo.group.scale.set(1.4, 1.4, 1.4);
+        if (state.bossInstance) {
+          state.bossInstance.group.visible = false;
+        }
+
+        const cY = getTerrainHeight(0, 0);
+        playerGroup.position.set(-1.4, cY + 1.2, 0);
+        playerGroup.rotation.set(0, Math.PI, 0);
+
+        alterEgo.group.position.set(1.4, cY, 0);
+        alterEgo.group.rotation.set(0, Math.PI, 0);
+
+        humanoid.updateAnimation({
+          dt,
+          time: now,
+          speed: 0,
+          forwardInput: 0,
+          rightInput: 0,
+          isSprinting: false,
+          isGrounded: true,
+          isSwimming: false,
+          headPitch: 0,
+          equippedWeapon: 'SWORD',
+          attackProgress: 0,
+          bowDrawProgress: 0,
+          bowReleaseTimer: 0,
+          hasArrows: true,
+          isSeatedOnThrone: false,
+          isCorrupted: false,
+          isCelestial: true,
+        });
+
+        alterEgo.updateAnimation({
+          dt,
+          time: now,
+          speed: 0,
+          forwardInput: 0,
+          rightInput: 0,
+          isSprinting: false,
+          isGrounded: true,
+          isSwimming: false,
+          headPitch: 0,
+          equippedWeapon: 'SWORD',
+          attackProgress: 0,
+          bowDrawProgress: 0,
+          bowReleaseTimer: 0,
+          hasArrows: true,
+          isSeatedOnThrone: false,
+          isCorrupted: true,
+          isCelestial: false,
+          glitchIntensity: 0.25 + Math.sin(now * 0.003) * 0.15,
+        });
+
+        const camBreathing = Math.sin(now * 0.0015) * 0.12;
+        camera.position.set(0, cY + 2.3 + camBreathing, 6.2);
+        camera.lookAt(0, cY + 1.8, 0);
+
+        renderer.render(scene, camera);
+        return;
+      }
+
       if (state.screen === 'GAME_OVER') {
         fpViewModel.group.visible = false;
         playerGroup.visible = true;
@@ -4217,8 +4671,49 @@ export function App() {
           if (boss && boss.active && !boss.defeated) {
             const dxB = arrow.position.x - boss.position.x;
             const dzB = arrow.position.z - boss.position.z;
-            const dyB = arrow.position.y - (boss.position.y + 4.5);
-            if (dxB * dxB + dzB * dzB < 7.5 && Math.abs(dyB) < 5.0) {
+            const dyB = arrow.position.y - (state.isDimensionalClashActive ? boss.position.y + 1.2 : boss.position.y + 4.5);
+            const distB2 = dxB * dxB + dzB * dzB;
+            if (state.isDimensionalClashActive && state.alterEgoPhase === 1 && distB2 < 20.0 && Math.abs(dyB) < 4.5) {
+              hitSomething = true;
+              soundFX.playSwordSwing();
+              soundFX.playLightningDash();
+              const pX = state.playerPos.x - boss.position.x;
+              const pZ = state.playerPos.z - boss.position.z;
+              const pDist = Math.hypot(pX, pZ);
+              const pDirX = pX / Math.max(0.001, pDist);
+              const pDirZ = pZ / Math.max(0.001, pDist);
+              boss.position.x = state.playerPos.x - pDirX * 2.2;
+              boss.position.z = state.playerPos.z - pDirZ * 2.2;
+              boss.position.y = getTerrainHeight(boss.position.x, boss.position.z);
+              boss.attackAnimTimer = 0.45;
+              boss.attackCooldown = 0.5;
+              state.alterEgoComboStep = 1;
+              if (state.divineInvulnTimer <= 0) {
+                state.health = Math.max(0, state.health - 22);
+                soundFX.playPlayerHurt();
+              }
+              const counterRing = new THREE.Mesh(
+                new THREE.RingGeometry(0.5, 2.5, 24),
+                new THREE.MeshBasicMaterial({
+                  color: 0xa855f7,
+                  transparent: true,
+                  opacity: 0.9,
+                  side: THREE.DoubleSide,
+                  blending: THREE.AdditiveBlending,
+                  depthWrite: false,
+                })
+              );
+              counterRing.rotation.x = -Math.PI / 2;
+              counterRing.position.set(boss.position.x, boss.position.y + 0.3, boss.position.z);
+              scene.add(counterRing);
+              state.visualEffects.push({
+                mesh: counterRing,
+                age: 0,
+                maxAge: 0.45,
+                type: 'NOVA_RING',
+              });
+              showToast("L'Autre Réalité pare votre tir et contre-attaque dans votre dos !");
+            } else if (distB2 < (state.isDimensionalClashActive ? 4.5 : 7.5) && Math.abs(dyB) < 5.0) {
               const horizLen = Math.max(
                 0.01,
                 Math.hypot(arrow.velocity.x, arrow.velocity.z)
@@ -4268,52 +4763,257 @@ export function App() {
         // --- IA & COMBAT DU BOSS TITAN MALAKOR ---
         const boss = state.bossInstance;
         if (boss && boss.active && !boss.defeated) {
-          boss.orbitingOrbs.rotation.y += dt * 2.0;
-          boss.chestReceptacle.rotation.z += dt * 2.5;
-
-          const dxP = state.playerPos.x - boss.position.x;
-          const dzP = state.playerPos.z - boss.position.z;
-          const distP = Math.hypot(dxP, dzP);
-          const dirX = dxP / Math.max(0.001, distP);
-          const dirZ = dzP / Math.max(0.001, distP);
-
-          boss.yaw = Math.atan2(-dirX, -dirZ);
-
-          if (boss.attackCooldown > 0) {
-            boss.attackCooldown = Math.max(0, boss.attackCooldown - dt);
-          }
-          if (boss.slamCooldown > 0) {
-            boss.slamCooldown = Math.max(0, boss.slamCooldown - dt);
-          }
-          if (boss.attackAnimTimer > 0) {
-            boss.attackAnimTimer = Math.max(0, boss.attackAnimTimer - dt);
-          }
-
-          const bossSpeed = distP > 5.2 ? 7.8 : 0;
-          boss.velocity.x = THREE.MathUtils.lerp(
-            boss.velocity.x,
-            dirX * bossSpeed,
-            Math.min(1, dt * 5)
-          );
-          boss.velocity.z = THREE.MathUtils.lerp(
-            boss.velocity.z,
-            dirZ * bossSpeed,
-            Math.min(1, dt * 5)
-          );
-
-          boss.position.x += boss.velocity.x * dt;
-          boss.position.z += boss.velocity.z * dt;
-          boss.position.y = getTerrainHeight(boss.position.x, boss.position.z);
-
-          boss.group.position.copy(boss.position);
-          boss.group.rotation.y = boss.yaw;
-
-          const bSpd = Math.hypot(boss.velocity.x, boss.velocity.z);
           if (state.isDimensionalClashActive) {
             boss.group.visible = false;
             alterEgo.group.visible = true;
+
+            const dxP = state.playerPos.x - boss.position.x;
+            const dzP = state.playerPos.z - boss.position.z;
+            const distP = Math.hypot(dxP, dzP);
+            const dirX = dxP / Math.max(0.001, distP);
+            const dirZ = dzP / Math.max(0.001, distP);
+
+            boss.yaw = Math.atan2(-dirX, -dirZ);
+
+            if (boss.attackCooldown > 0) boss.attackCooldown = Math.max(0, boss.attackCooldown - dt);
+            if (boss.attackAnimTimer > 0) boss.attackAnimTimer = Math.max(0, boss.attackAnimTimer - dt);
+            if (boss.slamCooldown > 0) boss.slamCooldown = Math.max(0, boss.slamCooldown - dt);
+            state.alterEgoDashCooldown = Math.max(0, state.alterEgoDashCooldown - dt);
+            state.alterEgoLightningCooldown = Math.max(0, state.alterEgoLightningCooldown - dt);
+            state.alterEgoTeleportCooldown = Math.max(0, state.alterEgoTeleportCooldown - dt);
+            state.alterEgoRiftCooldown = Math.max(0, state.alterEgoRiftCooldown - dt);
+
+            const phase = state.alterEgoPhase;
+            const phaseSpeed = phase === 3 ? 14.5 : phase === 2 ? 9.5 : 12.0;
+            const stopDist = phase === 1 ? 2.8 : phase === 2 ? 4.2 : 2.6;
+            const targetSpeed = distP > stopDist ? phaseSpeed : 0;
+
+            boss.velocity.x = THREE.MathUtils.lerp(
+              boss.velocity.x,
+              dirX * targetSpeed,
+              Math.min(1, dt * 7)
+            );
+            boss.velocity.z = THREE.MathUtils.lerp(
+              boss.velocity.z,
+              dirZ * targetSpeed,
+              Math.min(1, dt * 7)
+            );
+
+            boss.position.x += boss.velocity.x * dt;
+            boss.position.z += boss.velocity.z * dt;
+            boss.position.y = getTerrainHeight(boss.position.x, boss.position.z);
+
             alterEgo.group.position.copy(boss.position);
             alterEgo.group.rotation.y = boss.yaw + Math.PI;
+
+            const bSpd = Math.hypot(boss.velocity.x, boss.velocity.z);
+
+            if (phase === 1) {
+              if (state.alterEgoDashCooldown <= 0 && distP > 5.5 && distP < 32.0) {
+                state.alterEgoDashCooldown = 3.2 + Math.random() * 1.5;
+                soundFX.playLightningDash();
+                const trailMesh = new THREE.Mesh(
+                  new THREE.RingGeometry(0.5, 2.2, 20),
+                  new THREE.MeshBasicMaterial({
+                    color: 0x4a044e,
+                    transparent: true,
+                    opacity: 0.9,
+                    side: THREE.DoubleSide,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false,
+                  })
+                );
+                trailMesh.rotation.x = -Math.PI / 2;
+                trailMesh.position.copy(boss.position);
+                scene.add(trailMesh);
+                state.visualEffects.push({
+                  mesh: trailMesh,
+                  age: 0,
+                  maxAge: 0.45,
+                  type: 'NOVA_RING',
+                });
+                boss.position.x = state.playerPos.x - dirX * 2.2;
+                boss.position.z = state.playerPos.z - dirZ * 2.2;
+                boss.position.y = getTerrainHeight(boss.position.x, boss.position.z);
+                boss.velocity.set(dirX * 6, 0, dirZ * 6);
+                boss.attackCooldown = 0.15;
+              }
+
+              if (distP < 3.8 && boss.attackCooldown <= 0) {
+                const step = state.alterEgoComboStep;
+                boss.attackAnimTimer = 0.38;
+                soundFX.playSwordSwing();
+                if (step === 0) {
+                  boss.attackCooldown = 0.4;
+                  state.alterEgoComboStep = 1;
+                  if (state.divineInvulnTimer <= 0) {
+                    state.health = Math.max(0, state.health - 16);
+                    soundFX.playPlayerHurt();
+                  }
+                } else if (step === 1) {
+                  boss.attackCooldown = 0.42;
+                  state.alterEgoComboStep = 2;
+                  if (state.divineInvulnTimer <= 0) {
+                    state.health = Math.max(0, state.health - 20);
+                    soundFX.playPlayerHurt();
+                  }
+                } else {
+                  boss.attackCooldown = 1.15;
+                  state.alterEgoComboStep = 0;
+                  soundFX.playBossSlam();
+                  if (state.divineInvulnTimer <= 0) {
+                    state.health = Math.max(0, state.health - 26);
+                    state.playerVel.x += dirX * 14;
+                    state.playerVel.z += dirZ * 14;
+                    state.playerVel.y = 6.0;
+                    soundFX.playPlayerHurt();
+                  }
+                }
+              }
+            } else if (phase === 2) {
+              if (boss.slamCooldown <= 0 && distP < 14.0) {
+                boss.slamCooldown = 5.2;
+                boss.attackAnimTimer = 0.65;
+                soundFX.playBossSlam();
+                const slamGeo = new THREE.RingGeometry(1.2, 4.5, 32);
+                slamGeo.rotateX(-Math.PI / 2);
+                const slamMat = new THREE.MeshBasicMaterial({
+                  color: 0xf43f5e,
+                  transparent: true,
+                  opacity: 0.95,
+                  side: THREE.DoubleSide,
+                  blending: THREE.AdditiveBlending,
+                  depthWrite: false,
+                });
+                const slamMesh = new THREE.Mesh(slamGeo, slamMat);
+                slamMesh.position.set(boss.position.x, boss.position.y + 0.35, boss.position.z);
+                scene.add(slamMesh);
+                state.visualEffects.push({
+                  mesh: slamMesh,
+                  age: 0,
+                  maxAge: 0.68,
+                  type: 'BOSS_SLAM_RING',
+                });
+                if (distP < 11.0 && state.divineInvulnTimer <= 0) {
+                  state.health = Math.max(0, state.health - 26);
+                  state.playerVel.x += dirX * 18;
+                  state.playerVel.z += dirZ * 18;
+                  state.playerVel.y = 8.5;
+                  soundFX.playPlayerHurt();
+                }
+              } else if (state.alterEgoLightningCooldown <= 0) {
+                state.alterEgoLightningCooldown = 4.2;
+                boss.attackAnimTimer = 0.95;
+                const targetX = state.playerPos.x;
+                const targetZ = state.playerPos.z;
+                const targetY = getTerrainHeight(targetX, targetZ);
+                const telegGeo = new THREE.RingGeometry(0.4, 3.2, 32);
+                telegGeo.rotateX(-Math.PI / 2);
+                const telegMat = new THREE.MeshBasicMaterial({
+                  color: 0xff1744,
+                  transparent: true,
+                  opacity: 0.85,
+                  side: THREE.DoubleSide,
+                  blending: THREE.AdditiveBlending,
+                  depthWrite: false,
+                });
+                const telegMesh = new THREE.Mesh(telegGeo, telegMat);
+                telegMesh.position.set(targetX, targetY + 0.08, targetZ);
+                scene.add(telegMesh);
+                state.visualEffects.push({
+                  mesh: telegMesh,
+                  age: 0,
+                  maxAge: 1.05,
+                  targetX,
+                  targetZ,
+                  type: 'SCARLET_TELEGRAPH',
+                });
+              } else if (distP < 3.2 && boss.attackCooldown <= 0) {
+                boss.attackCooldown = 1.2;
+                boss.attackAnimTimer = 0.45;
+                soundFX.playSwordSwing();
+                if (state.divineInvulnTimer <= 0) {
+                  state.health = Math.max(0, state.health - 22);
+                  soundFX.playPlayerHurt();
+                }
+              }
+            } else if (phase === 3) {
+              if (state.alterEgoTeleportCooldown <= 0) {
+                state.alterEgoTeleportCooldown = 1.6 + Math.random() * 0.9;
+                soundFX.playVoidDimensionSeal();
+                const warpMesh = new THREE.Mesh(
+                  new THREE.RingGeometry(0.5, 2.8, 24),
+                  new THREE.MeshBasicMaterial({
+                    color: 0xd946ef,
+                    transparent: true,
+                    opacity: 0.9,
+                    side: THREE.DoubleSide,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false,
+                  })
+                );
+                warpMesh.rotation.x = -Math.PI / 2;
+                warpMesh.position.copy(boss.position);
+                scene.add(warpMesh);
+                state.visualEffects.push({
+                  mesh: warpMesh,
+                  age: 0,
+                  maxAge: 0.42,
+                  type: 'NOVA_RING',
+                });
+
+                const ang = Math.random() * Math.PI * 2;
+                const d = 3.2 + Math.random() * 4.5;
+                const newX = state.playerPos.x + Math.cos(ang) * d;
+                const newZ = state.playerPos.z + Math.sin(ang) * d;
+                const newY = getTerrainHeight(newX, newZ);
+                boss.position.set(newX, newY, newZ);
+                boss.velocity.set(0, 0, 0);
+                boss.attackAnimTimer = 0.4;
+                boss.attackCooldown = 0.45;
+              }
+
+              if (state.alterEgoRiftCooldown <= 0) {
+                state.alterEgoRiftCooldown = 4.0 + Math.random() * 1.5;
+                const riftX = state.playerPos.x + (Math.random() - 0.5) * 6;
+                const riftZ = state.playerPos.z + (Math.random() - 0.5) * 6;
+                const riftY = getTerrainHeight(riftX, riftZ);
+                const riftGeo = new THREE.RingGeometry(0.6, 3.4, 28);
+                riftGeo.rotateX(-Math.PI / 2);
+                const riftMat = new THREE.MeshBasicMaterial({
+                  color: 0x9333ea,
+                  transparent: true,
+                  opacity: 0.85,
+                  side: THREE.DoubleSide,
+                  blending: THREE.AdditiveBlending,
+                  depthWrite: false,
+                });
+                const riftMesh = new THREE.Mesh(riftGeo, riftMat);
+                riftMesh.position.set(riftX, riftY + 0.08, riftZ);
+                scene.add(riftMesh);
+                state.visualEffects.push({
+                  mesh: riftMesh,
+                  age: 0,
+                  maxAge: 4.5,
+                  targetX: riftX,
+                  targetZ: riftZ,
+                  type: 'REALITY_RIFT',
+                });
+              }
+
+              if (distP < 3.5 && boss.attackCooldown <= 0) {
+                boss.attackCooldown = 0.55;
+                boss.attackAnimTimer = 0.35;
+                soundFX.playSwordSwing();
+                if (state.divineInvulnTimer <= 0) {
+                  state.health = Math.max(0, state.health - 24);
+                  state.playerVel.x += dirX * 8;
+                  state.playerVel.z += dirZ * 8;
+                  soundFX.playPlayerHurt();
+                }
+              }
+            }
+
             alterEgo.updateAnimation({
               dt,
               time: now,
@@ -4326,7 +5026,7 @@ export function App() {
               headPitch: 0,
               attackProgress:
                 boss.attackAnimTimer > 0
-                  ? 1 - boss.attackAnimTimer / 0.55
+                  ? 1 - boss.attackAnimTimer / 0.5
                   : 0,
               equippedWeapon: 'SWORD',
               bowDrawProgress: 0,
@@ -4335,85 +5035,128 @@ export function App() {
               isSeatedOnThrone: false,
               isCorrupted: true,
               isCelestial: false,
+              glitchIntensity: phase === 3 ? 1.0 : 0,
             });
           } else {
             alterEgo.group.visible = false;
-          }
 
-          if (bSpd > 0.5) {
-            boss.walkPhase += dt * bSpd * 0.65;
-            boss.leftLeg.rotation.x = Math.sin(boss.walkPhase) * 0.55;
-            boss.rightLeg.rotation.x = -Math.sin(boss.walkPhase) * 0.55;
-            boss.leftArm.rotation.x = -Math.sin(boss.walkPhase) * 0.45;
-          } else {
-            boss.leftLeg.rotation.x *= 0.85;
-            boss.rightLeg.rotation.x *= 0.85;
-            boss.leftArm.rotation.x *= 0.85;
-          }
+            boss.orbitingOrbs.rotation.y += dt * 2.0;
+            boss.chestReceptacle.rotation.z += dt * 2.5;
 
-          if (distP < 12.5 && boss.slamCooldown <= 0) {
-            boss.slamCooldown = 5.5;
-            boss.attackAnimTimer = 0.55;
-            soundFX.playBossSlam();
+            const dxP = state.playerPos.x - boss.position.x;
+            const dzP = state.playerPos.z - boss.position.z;
+            const distP = Math.hypot(dxP, dzP);
+            const dirX = dxP / Math.max(0.001, distP);
+            const dirZ = dzP / Math.max(0.001, distP);
 
-            const slamGeo = new THREE.RingGeometry(1.2, 3.0, 32);
-            slamGeo.rotateX(-Math.PI / 2);
-            const slamMat = new THREE.MeshBasicMaterial({
-              color: 0xf43f5e,
-              transparent: true,
-              opacity: 0.9,
-              side: THREE.DoubleSide,
-              blending: THREE.AdditiveBlending,
-              depthWrite: false,
-            });
-            const slamMesh = new THREE.Mesh(slamGeo, slamMat);
-            slamMesh.position.set(
-              boss.position.x,
-              boss.position.y + 0.4,
-              boss.position.z
-            );
-            scene.add(slamMesh);
-            state.visualEffects.push({
-              mesh: slamMesh,
-              age: 0,
-              maxAge: 0.65,
-              type: 'BOSS_SLAM_RING',
-            });
+            boss.yaw = Math.atan2(-dirX, -dirZ);
 
-            if (distP < 11.5 && state.divineInvulnTimer <= 0) {
-              state.health = Math.max(0, state.health - 24);
-              state.playerVel.x += dirX * 16;
-              state.playerVel.z += dirZ * 16;
-              state.playerVel.y = 8.5;
-              soundFX.playPlayerHurt();
+            if (boss.attackCooldown > 0) {
+              boss.attackCooldown = Math.max(0, boss.attackCooldown - dt);
             }
-          } else if (distP < 6.0 && boss.attackCooldown <= 0) {
-            boss.attackCooldown = 1.6;
-            boss.attackAnimTimer = 0.45;
-            if (state.divineInvulnTimer <= 0) {
-              state.health = Math.max(0, state.health - 20);
-              soundFX.playPlayerHurt();
+            if (boss.slamCooldown > 0) {
+              boss.slamCooldown = Math.max(0, boss.slamCooldown - dt);
+            }
+            if (boss.attackAnimTimer > 0) {
+              boss.attackAnimTimer = Math.max(0, boss.attackAnimTimer - dt);
+            }
+
+            const bossSpeed = distP > 5.2 ? 7.8 : 0;
+            boss.velocity.x = THREE.MathUtils.lerp(
+              boss.velocity.x,
+              dirX * bossSpeed,
+              Math.min(1, dt * 5)
+            );
+            boss.velocity.z = THREE.MathUtils.lerp(
+              boss.velocity.z,
+              dirZ * bossSpeed,
+              Math.min(1, dt * 5)
+            );
+
+            boss.position.x += boss.velocity.x * dt;
+            boss.position.z += boss.velocity.z * dt;
+            boss.position.y = getTerrainHeight(boss.position.x, boss.position.z);
+
+            boss.group.position.copy(boss.position);
+            boss.group.rotation.y = boss.yaw;
+
+            const bSpd = Math.hypot(boss.velocity.x, boss.velocity.z);
+
+            if (bSpd > 0.5) {
+              boss.walkPhase += dt * bSpd * 0.65;
+              boss.leftLeg.rotation.x = Math.sin(boss.walkPhase) * 0.55;
+              boss.rightLeg.rotation.x = -Math.sin(boss.walkPhase) * 0.55;
+              boss.leftArm.rotation.x = -Math.sin(boss.walkPhase) * 0.45;
+            } else {
+              boss.leftLeg.rotation.x *= 0.85;
+              boss.rightLeg.rotation.x *= 0.85;
+              boss.leftArm.rotation.x *= 0.85;
+            }
+
+            if (distP < 12.5 && boss.slamCooldown <= 0) {
+              boss.slamCooldown = 5.5;
+              boss.attackAnimTimer = 0.55;
+              soundFX.playBossSlam();
+
+              const slamGeo = new THREE.RingGeometry(1.2, 3.0, 32);
+              slamGeo.rotateX(-Math.PI / 2);
+              const slamMat = new THREE.MeshBasicMaterial({
+                color: 0xf43f5e,
+                transparent: true,
+                opacity: 0.9,
+                side: THREE.DoubleSide,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+              });
+              const slamMesh = new THREE.Mesh(slamGeo, slamMat);
+              slamMesh.position.set(
+                boss.position.x,
+                boss.position.y + 0.4,
+                boss.position.z
+              );
+              scene.add(slamMesh);
+              state.visualEffects.push({
+                mesh: slamMesh,
+                age: 0,
+                maxAge: 0.65,
+                type: 'BOSS_SLAM_RING',
+              });
+
+              if (distP < 11.5 && state.divineInvulnTimer <= 0) {
+                state.health = Math.max(0, state.health - 24);
+                state.playerVel.x += dirX * 16;
+                state.playerVel.z += dirZ * 16;
+                state.playerVel.y = 8.5;
+                soundFX.playPlayerHurt();
+              }
+            } else if (distP < 6.0 && boss.attackCooldown <= 0) {
+              boss.attackCooldown = 1.6;
+              boss.attackAnimTimer = 0.45;
+              if (state.divineInvulnTimer <= 0) {
+                state.health = Math.max(0, state.health - 20);
+                soundFX.playPlayerHurt();
+              }
+            }
+
+            if (boss.attackAnimTimer > 0) {
+              const p = 1 - boss.attackAnimTimer / 0.5;
+              const slashRot =
+                p < 0.35
+                  ? 0.2 + (p / 0.35) * 1.4
+                  : 1.6 - ((p - 0.35) / 0.65) * 2.4;
+              boss.rightArm.rotation.x = slashRot;
+            } else {
+              boss.rightArm.rotation.x = THREE.MathUtils.lerp(
+                boss.rightArm.rotation.x,
+                0.25,
+                Math.min(1, dt * 8)
+              );
             }
           }
 
           if (state.health <= 0) {
             triggerGameOver();
             return;
-          }
-
-          if (boss.attackAnimTimer > 0) {
-            const p = 1 - boss.attackAnimTimer / 0.5;
-            const slashRot =
-              p < 0.35
-                ? 0.2 + (p / 0.35) * 1.4
-                : 1.6 - ((p - 0.35) / 0.65) * 2.4;
-            boss.rightArm.rotation.x = slashRot;
-          } else {
-            boss.rightArm.rotation.x = THREE.MathUtils.lerp(
-              boss.rightArm.rotation.x,
-              0.25,
-              Math.min(1, dt * 8)
-            );
           }
         }
 
@@ -4763,13 +5506,15 @@ export function App() {
               active: boss?.active ?? false,
               defeated: boss?.defeated ?? false,
               name: state.isDimensionalClashActive
-                ? 'Souverain du Néant (Alter Ego)'
+                ? "L'Autre Réalité - Souverain du Néant"
                 : 'Malakor, Titan du Néant',
               x: boss?.position.x ?? 0,
               y: boss?.position.y ?? 0,
               z: boss?.position.z ?? 0,
               hp: boss?.hp ?? 1200,
               maxHp: boss?.maxHp ?? 1200,
+              phase: state.alterEgoPhase,
+              isAlterEgo: state.isDimensionalClashActive,
             },
           }));
         }
@@ -4793,6 +5538,7 @@ export function App() {
     animationFrameId = requestAnimationFrame(animate);
 
     return () => {
+      bossDamageHandlerRef.current = null;
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
@@ -4940,6 +5686,10 @@ export function App() {
         onResetAllSaves={handleResetAllSaves}
         onRetryGameOver={handleRetryGameOver}
         onForceGameOver={handleForceGameOver}
+        onSpawnBossPhase1={handleSpawnBossPhase1}
+        onForceBossPhase2={handleForceBossPhase2}
+        onForceBossPhase3={handleForceBossPhase3}
+        onForceBossZeroHp={handleForceBossZeroHp}
       />
     </div>
   );
