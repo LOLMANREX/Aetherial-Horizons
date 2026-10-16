@@ -10,6 +10,7 @@ export default defineConfig(({ mode }) => {
         'process.env.API_KEY' : JSON.stringify('api-key-this-is-not-used-can-be-ignored!'),
       },
       server: {
+        host: true,
         port: 5173,
         proxy: {
           '/api-proxy': 'http://localhost:5000',
