@@ -548,6 +548,102 @@ export function App() {
     }, 1100);
   }, [exitLockSafe, updateScreen]);
 
+  const handleDebugJumpToEndingChoice = useCallback(() => {
+    const st = gameRef.current;
+    exitLockSafe();
+
+    const completedOrbs = (st.orbs.length > 0 ? st.orbs : generateInitialOrbs(st.activeSlot * 137)).map(
+      (o) => ({ ...o, collected: true })
+    );
+    const heroZ = 12;
+    const startY = getTerrainHeight(0, heroZ) + 2.0;
+
+    st.orbs = completedOrbs;
+    st.playerPos.set(0, startY, heroZ);
+    st.playerVel.set(0, 0, 0);
+    st.yaw = 0;
+    st.pitch = 0.05;
+    st.health = 100;
+    st.stamina = 100;
+    st.oxygen = 100;
+    st.arrows = 20;
+    st.equippedWeapon = 'SWORD';
+    st.isDrawingBow = false;
+    st.bowDrawProgress = 0;
+    st.dashCooldownTimer = 0;
+    st.novaCooldownTimer = 0;
+    st.divineInvulnTimer = 0;
+    st.endingChoice = 'NONE';
+    st.keys = {};
+    st.cutsceneStepTimer = 0;
+    st.cutsceneStepIndex = 1;
+
+    if (st.bossInstance) {
+      st.bossInstance.active = false;
+      st.bossInstance.defeated = true;
+      st.bossInstance.hp = 0;
+      st.bossInstance.group.visible = false;
+    }
+    if (st.fallingReceptacleMesh) {
+      st.fallingReceptacleMesh.visible = false;
+    }
+    if (st.sovereignThrone) {
+      st.sovereignThrone.group.visible = false;
+    }
+    if (st.purificationWaveMesh) {
+      st.purificationWaveMesh.visible = false;
+    }
+    if (st.finaleMonumentGroup) {
+      st.finaleMonumentGroup.visible = true;
+    }
+    if (st.skyPillarMesh) {
+      (st.skyPillarMesh.material as THREE.MeshBasicMaterial).color.setHex(0x38bdf8);
+    }
+    if (st.restoredHeartMesh) {
+      st.restoredHeartMesh.visible = true;
+      (st.restoredHeartMesh.material as THREE.MeshBasicMaterial).color.setHex(0xfef08a);
+    }
+
+    syncOrbMeshesWithState(completedOrbs);
+    setEndingChoice('NONE');
+    setCutsceneStep(1);
+    setCutsceneProgress(0);
+
+    setPlayerStats((prev) => ({
+      ...prev,
+      health: 100,
+      maxHealth: 100,
+      stamina: 100,
+      oxygen: 100,
+      arrows: 20,
+      maxArrows: 20,
+      equippedWeapon: 'SWORD',
+      activePowers: completedOrbs.length,
+      endingChoice: 'NONE',
+    }));
+
+    setWorldState((prev) => ({
+      ...prev,
+      orbsCollected: completedOrbs.length,
+      totalOrbs: completedOrbs.length,
+      enemyTier: 1 + completedOrbs.length,
+      nearestOrbDistance: null,
+      nearestOrbAngle: null,
+      orbs: completedOrbs,
+      boss: {
+        ...prev.boss,
+        active: false,
+        defeated: true,
+        hp: 0,
+      },
+    }));
+
+    performSave(st.activeSlot);
+    soundFX.init();
+    soundFX.playCinematicChord(1, true);
+    updateScreen('OUTRO_CUTSCENE');
+  }, [exitLockSafe, performSave, syncOrbMeshesWithState, updateScreen]);
+
   const handleSelectEndingChoice = useCallback(
     (choice: 'SAVE_WORLD' | 'RULE_WORLD') => {
       const st = gameRef.current;
@@ -4162,6 +4258,7 @@ export function App() {
         onToggleSound={handleToggleSound}
         onToggleCamera={handleToggleCamera}
         onReplayOutro={startOutroCutscene}
+        onDebugJumpToEndingChoice={handleDebugJumpToEndingChoice}
       />
     </div>
   );

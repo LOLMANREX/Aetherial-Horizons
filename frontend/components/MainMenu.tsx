@@ -17,6 +17,11 @@ import {
   Clock,
   Film,
   Flame,
+  Settings,
+  Lock,
+  Unlock,
+  KeyRound,
+  X,
 } from 'lucide-react';
 
 interface MainMenuProps {
@@ -37,6 +42,7 @@ interface MainMenuProps {
   onToggleSound: () => void;
   onToggleCamera: () => void;
   onReplayOutro?: () => void;
+  onDebugJumpToEndingChoice?: () => void;
 }
 
 export const MainMenu: React.FC<MainMenuProps> = ({
@@ -57,9 +63,24 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   onToggleSound,
   onToggleCamera,
   onReplayOutro,
+  onDebugJumpToEndingChoice,
 }) => {
   const [activeTab, setActiveTab] = useState<'MAIN' | 'SAVES' | 'CONTROLS'>('MAIN');
   const [savedToastSlot, setSavedToastSlot] = useState<number | null>(null);
+  const [isOptionsOpen, setIsOptionsOpen] = useState(false);
+  const [debugPinInput, setDebugPinInput] = useState('');
+  const [isDebugUnlocked, setIsDebugUnlocked] = useState(false);
+  const [debugPinError, setDebugPinError] = useState(false);
+
+  const handleValidateDebugPin = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (debugPinInput.trim() === '1102') {
+      setIsDebugUnlocked(true);
+      setDebugPinError(false);
+    } else {
+      setDebugPinError(true);
+    }
+  };
 
   if (
     screen === 'PLAYING' ||
@@ -244,6 +265,14 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                 </button>
 
                 <button
+                  onClick={() => setIsOptionsOpen(true)}
+                  className="w-full py-3 rounded-2xl bg-slate-800/70 hover:bg-slate-800 text-slate-200 font-semibold text-sm flex items-center justify-center gap-2 border border-slate-800 transition-all cursor-pointer"
+                >
+                  <Settings className="w-4 h-4 text-emerald-400" />
+                  Options
+                </button>
+
+                <button
                   onClick={onReturnToMainMenu}
                   className="w-full py-3 rounded-2xl bg-slate-950/70 hover:bg-rose-950/40 text-slate-400 hover:text-rose-300 font-semibold text-sm flex items-center justify-center gap-2 border border-slate-800/80 transition-all cursor-pointer"
                 >
@@ -289,6 +318,14 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                 >
                   <FolderOpen className="w-4 h-4 text-cyan-400" />
                   Emplacements de Sauvegarde (3 Slots)
+                </button>
+
+                <button
+                  onClick={() => setIsOptionsOpen(true)}
+                  className="w-full py-3.5 rounded-2xl bg-slate-800/70 hover:bg-slate-800 text-slate-200 font-semibold text-sm flex items-center justify-center gap-2 border border-slate-800 transition-all cursor-pointer"
+                >
+                  <Settings className="w-4 h-4 text-amber-400" />
+                  Options
                 </button>
               </>
             )}
@@ -465,6 +502,144 @@ export const MainMenu: React.FC<MainMenuProps> = ({
           </div>
         )}
       </div>
+
+      {isOptionsOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/85 backdrop-blur-xl p-4 pointer-events-auto">
+          <div className="bg-slate-900 border border-slate-700/80 rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-400/15 border border-amber-400/30 flex items-center justify-center text-amber-300">
+                  <Settings className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-white">Options</h2>
+                  <p className="text-xs text-slate-400">Paramètres généraux et accès développeur</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsOptionsOpen(false)}
+                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-all cursor-pointer"
+                title="Fermer les options"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                Audio & Affichage
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button
+                  onClick={onToggleSound}
+                  className="py-3 px-4 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-slate-800 flex items-center justify-between text-xs font-semibold text-slate-200 transition-all cursor-pointer"
+                >
+                  <span className="flex items-center gap-2">
+                    {soundEnabled ? (
+                      <Volume2 className="w-4 h-4 text-emerald-400" />
+                    ) : (
+                      <VolumeX className="w-4 h-4 text-slate-500" />
+                    )}
+                    Effets Sonores
+                  </span>
+                  <span className={soundEnabled ? 'text-emerald-400' : 'text-slate-500'}>
+                    {soundEnabled ? 'Activés' : 'Muets'}
+                  </span>
+                </button>
+
+                <button
+                  onClick={onToggleCamera}
+                  className="py-3 px-4 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-slate-800 flex items-center justify-between text-xs font-semibold text-slate-200 transition-all cursor-pointer"
+                >
+                  <span className="flex items-center gap-2">
+                    <Eye className="w-4 h-4 text-cyan-400" />
+                    Vue Caméra
+                  </span>
+                  <span className="text-cyan-400">
+                    {cameraMode === 'FIRST_PERSON' ? '1ère Personne' : '3ème Personne'}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-950/90 border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+                  {isDebugUnlocked ? (
+                    <Unlock className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <Lock className="w-3.5 h-3.5 text-amber-400" />
+                  )}
+                  Debug
+                </span>
+                <span
+                  className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${
+                    isDebugUnlocked
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                      : 'bg-slate-800 text-slate-400 border-slate-700'
+                  }`}
+                >
+                  {isDebugUnlocked ? 'Déverrouillé' : 'Accès PIN requis'}
+                </span>
+              </div>
+
+              <form onSubmit={handleValidateDebugPin} className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <KeyRound className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="password"
+                    value={debugPinInput}
+                    onChange={(e) => {
+                      setDebugPinInput(e.target.value);
+                      if (debugPinError) setDebugPinError(false);
+                    }}
+                    placeholder="Code PIN Debug..."
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs transition-all cursor-pointer"
+                >
+                  Valider
+                </button>
+              </form>
+
+              {debugPinError && (
+                <p className="text-xs text-rose-400 font-semibold">
+                  Code PIN incorrect. Accès debug refusé.
+                </p>
+              )}
+
+              {isDebugUnlocked && onDebugJumpToEndingChoice && (
+                <div className="pt-2 border-t border-slate-800/80 space-y-2">
+                  <p className="text-[11px] text-emerald-300">
+                    Code 1102 validé : équipement complet, 10/10 Orbes et boss vaincu seront initialisés.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOptionsOpen(false);
+                      onDebugJumpToEndingChoice();
+                    }}
+                    className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-300 via-yellow-200 to-cyan-300 hover:from-amber-200 hover:to-cyan-200 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-amber-400/20 transition-all cursor-pointer"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    Sauter au Choix des Fins
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => setIsOptionsOpen(false)}
+              className="w-full py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 transition-all cursor-pointer"
+            >
+              Fermer et revenir au Menu Principal
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
