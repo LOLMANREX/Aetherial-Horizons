@@ -148,27 +148,27 @@ export const CutsceneOverlay: React.FC<CutsceneOverlayProps> = ({
       </div>
 
       {isWaitingForChoice && onSelectEndingChoice && (
-        <div className="pointer-events-auto flex-1 flex items-center justify-center px-4 relative z-20">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 max-w-3xl w-full">
+        <div className="pointer-events-auto flex-1 flex items-center justify-center px-4 py-2 overflow-y-auto relative z-20">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl w-full">
             <button
               onClick={() => onSelectEndingChoice('SAVE_WORLD')}
-              className="group bg-slate-950/85 hover:bg-amber-950/80 backdrop-blur-xl border-2 border-amber-300/60 hover:border-amber-200 rounded-3xl p-6 text-left transition-all transform hover:scale-[1.03] shadow-[0_0_40px_rgba(251,191,36,0.3)] cursor-pointer flex flex-col justify-between"
+              className="group bg-slate-950/95 hover:bg-amber-950/90 backdrop-blur-xl border-2 border-amber-300/60 hover:border-amber-200 rounded-3xl p-5 text-left transition-all transform hover:scale-[1.02] shadow-2xl cursor-pointer flex flex-col justify-between"
             >
               <div>
-                <div className="w-12 h-12 rounded-2xl bg-amber-400/20 border border-amber-300/50 flex items-center justify-center text-amber-200 mb-4 group-hover:scale-110 transition-transform">
-                  <Sun className="w-6 h-6" />
+                <div className="w-11 h-11 rounded-2xl bg-amber-400/20 border border-amber-300/50 flex items-center justify-center text-amber-200 mb-3 group-hover:scale-110 transition-transform">
+                  <Sun className="w-5 h-5" />
                 </div>
                 <div className="text-[11px] font-bold uppercase tracking-widest text-amber-300 mb-1">
                   Voie de la Transcendance
                 </div>
-                <h3 className="text-xl font-black text-white mb-2">
+                <h3 className="text-lg sm:text-xl font-black text-white mb-1.5">
                   Transcender en Entité Céleste
                 </h3>
-                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                <p className="text-xs sm:text-sm text-slate-200 leading-relaxed">
                   Unissez le Réceptacle Sacré à votre âme pour restaurer la lumière d’Aetheria sans perdre aucun pouvoir. Vous éveillez l’Arsenal Cosmique (Lame de l’Origine, Arc Stellaire, Jugement du Cosmos) pour affronter les Démons de l’Espace-Temps.
                 </p>
               </div>
-              <div className="mt-5 pt-3 border-t border-amber-400/25 flex items-center justify-between text-xs font-extrabold text-amber-200">
+              <div className="mt-4 pt-3 border-t border-amber-400/25 flex items-center justify-between text-xs font-extrabold text-amber-200">
                 <span>Choisir l’Ascension Céleste</span>
                 <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </div>
@@ -176,23 +176,23 @@ export const CutsceneOverlay: React.FC<CutsceneOverlayProps> = ({
 
             <button
               onClick={() => onSelectEndingChoice('RULE_WORLD')}
-              className="group bg-slate-950/85 hover:bg-rose-950/80 backdrop-blur-xl border-2 border-rose-500/60 hover:border-fuchsia-400 rounded-3xl p-6 text-left transition-all transform hover:scale-[1.03] shadow-[0_0_45px_rgba(244,63,94,0.35)] cursor-pointer flex flex-col justify-between"
+              className="group bg-slate-950/95 hover:bg-rose-950/90 backdrop-blur-xl border-2 border-rose-500/60 hover:border-fuchsia-400 rounded-3xl p-5 text-left transition-all transform hover:scale-[1.02] shadow-2xl cursor-pointer flex flex-col justify-between"
             >
               <div>
-                <div className="w-12 h-12 rounded-2xl bg-rose-500/20 border border-rose-400/40 flex items-center justify-center text-rose-400 mb-4 group-hover:scale-110 transition-transform">
-                  <Flame className="w-6 h-6" />
+                <div className="w-11 h-11 rounded-2xl bg-rose-500/20 border border-rose-400/40 flex items-center justify-center text-rose-400 mb-3 group-hover:scale-110 transition-transform">
+                  <Flame className="w-5 h-5" />
                 </div>
                 <div className="text-[11px] font-bold uppercase tracking-widest text-rose-400 mb-1">
                   Voie du Néant Absolu
                 </div>
-                <h3 className="text-xl font-black text-white mb-2">
+                <h3 className="text-lg sm:text-xl font-black text-white mb-1.5">
                   Devenir le Souverain du Néant
                 </h3>
-                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                <p className="text-xs sm:text-sm text-slate-200 leading-relaxed">
                   Assumez votre chute : dévorez le Réceptacle et sacrifiez cette réalité pour alimenter votre ascension vers les autres mondes. Déchaînez la foudre écarlate et scellez la dimension sous votre règne abyssal.
                 </p>
               </div>
-              <div className="mt-5 pt-3 border-t border-rose-500/20 flex items-center justify-between text-xs font-extrabold text-rose-300">
+              <div className="mt-4 pt-3 border-t border-rose-500/20 flex items-center justify-between text-xs font-extrabold text-rose-300">
                 <span>Revendiquer le Néant</span>
                 <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </div>
@@ -201,30 +201,22 @@ export const CutsceneOverlay: React.FC<CutsceneOverlayProps> = ({
         </div>
       )}
 
-      <div className="w-full bg-gradient-to-t from-black via-black/90 to-transparent pt-12 pb-7 px-6 sm:px-12 flex flex-col items-center relative z-20">
-        <div className="max-w-3xl w-full text-center space-y-2.5">
+      <div className="w-full pb-5 pt-4 px-4 sm:px-8 flex flex-col items-center relative z-20">
+        <div className="max-w-3xl w-full bg-slate-950/92 backdrop-blur-xl border border-slate-800/90 rounded-3xl px-6 py-5 text-center space-y-2.5 shadow-2xl">
           <h2
-            className={`text-xl sm:text-2xl font-black tracking-wide drop-shadow ${
+            className={`text-xl sm:text-2xl font-black tracking-wide ${
               mode === 'BOSS' || endingChoice === 'RULE_WORLD'
                 ? 'text-rose-400'
                 : 'text-amber-300'
             }`}
-            style={
-              endingChoice === 'RULE_WORLD'
-                ? {
-                    textShadow:
-                      '-2px 0 rgba(244, 63, 94, 0.9), 2px 0 rgba(168, 85, 247, 0.9), 0 0 18px rgba(225, 29, 72, 0.65)',
-                  }
-                : undefined
-            }
           >
             {displayTitle}
           </h2>
-          <p className="text-sm sm:text-base text-slate-100 leading-relaxed font-medium drop-shadow-md min-h-[3.5rem]">
+          <p className="text-sm sm:text-base text-white leading-relaxed font-medium">
             {displaySubtitle}
           </p>
 
-          <div className="pt-4 flex items-center justify-between gap-4 border-t border-white/10">
+          <div className="pt-3 flex items-center justify-between gap-4 border-t border-slate-800">
             <div className="flex items-center gap-2 flex-1 max-w-xs">
               {slides.map((_, idx) => {
                 const fill =
@@ -236,11 +228,11 @@ export const CutsceneOverlay: React.FC<CutsceneOverlayProps> = ({
                 return (
                   <div
                     key={idx}
-                    className="h-1.5 flex-1 bg-white/15 rounded-full overflow-hidden"
+                    className="h-1.5 flex-1 bg-slate-800 rounded-full overflow-hidden"
                   >
                     <div
                       className={`h-full transition-all duration-100 ${
-                        mode === 'BOSS'
+                        mode === 'BOSS' || endingChoice === 'RULE_WORLD'
                           ? 'bg-gradient-to-r from-rose-500 to-amber-400'
                           : 'bg-gradient-to-r from-amber-400 to-cyan-400'
                       }`}
@@ -254,7 +246,7 @@ export const CutsceneOverlay: React.FC<CutsceneOverlayProps> = ({
             {!isWaitingForChoice && onPrevStep && stepIndex > 0 && (
               <button
                 onClick={onPrevStep}
-                className="pointer-events-auto px-4 py-2 rounded-full font-bold text-xs flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-slate-100 transition-all cursor-pointer"
+                className="pointer-events-auto px-4 py-2 rounded-full font-bold text-xs flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-100 transition-all cursor-pointer"
               >
                 <ChevronLeft className="w-4 h-4" />
                 <span>Précédent</span>
@@ -265,7 +257,7 @@ export const CutsceneOverlay: React.FC<CutsceneOverlayProps> = ({
               <button
                 onClick={onNextStep}
                 className={`pointer-events-auto px-5 py-2 rounded-full font-extrabold text-xs flex items-center gap-1.5 shadow-lg transition-all cursor-pointer ${
-                  mode === 'BOSS'
+                  mode === 'BOSS' || endingChoice === 'RULE_WORLD'
                     ? 'bg-rose-500 hover:bg-rose-400 text-white shadow-rose-500/25'
                     : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-500/20'
                 }`}

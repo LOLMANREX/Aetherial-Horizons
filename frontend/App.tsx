@@ -4306,8 +4306,7 @@ export function App() {
         style={
           endingChoice === 'RULE_WORLD'
             ? {
-                filter:
-                  'contrast(1.12) saturate(1.22) drop-shadow(-2px 0px 0px rgba(244,63,94,0.42)) drop-shadow(2px 0px 0px rgba(168,85,247,0.42))',
+                filter: 'contrast(1.1) saturate(1.18)',
               }
             : undefined
         }
