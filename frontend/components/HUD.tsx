@@ -83,34 +83,39 @@ export const HUD: React.FC<HUDProps> = ({
         />
       )}
 
-      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center z-20">
+      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex flex-col items-center justify-center z-20">
         {player.equippedWeapon === 'BOW' ? (
-          <div className="relative flex items-center justify-center">
-            <div
-              className={`w-7 h-7 rounded-full border-2 transition-transform duration-75 flex items-center justify-center ${
-                isRuler
-                  ? 'border-rose-500 shadow-[0_0_12px_#f43f5e]'
-                  : isCelestial
-                  ? 'border-amber-200 shadow-[0_0_14px_#fde047]'
-                  : isFullyCharged
-                  ? 'border-cyan-400 shadow-[0_0_12px_#22d3ee]'
-                  : player.bowCharge > 0.05
-                  ? 'border-amber-400'
-                  : 'border-amber-400/50'
-              }`}
-              style={{ transform: `scale(${bowCircleScale})` }}
-            />
-            <div
-              className={`absolute w-1.5 h-1.5 rounded-full ${
-                isRuler
-                  ? 'bg-rose-400 shadow-[0_0_8px_#f43f5e]'
-                  : isCelestial
-                  ? 'bg-yellow-200 shadow-[0_0_10px_#fef08a]'
-                  : isFullyCharged
-                  ? 'bg-cyan-300 shadow-[0_0_8px_#22d3ee]'
-                  : 'bg-amber-300 shadow-[0_0_6px_#fbbf24]'
-              }`}
-            />
+          <div className="relative flex flex-col items-center justify-center">
+            <div className="relative flex items-center justify-center">
+              <div
+                className={`w-10 h-10 rounded-full border-2 transition-transform duration-75 flex items-center justify-center ${
+                  isRuler
+                    ? 'border-rose-500 shadow-[0_0_16px_#f43f5e]'
+                    : isCelestial || isFullyCharged
+                    ? 'border-amber-200 shadow-[0_0_18px_#fde047]'
+                    : player.isDrawingBow || player.bowCharge > 0.05
+                    ? 'border-cyan-400 shadow-[0_0_14px_#22d3ee]'
+                    : 'border-amber-400/70'
+                }`}
+                style={{ transform: `scale(${bowCircleScale})` }}
+              />
+              <div className="absolute w-5 h-0.5 bg-amber-200/70" />
+              <div className="absolute w-0.5 h-5 bg-amber-200/70" />
+              <div
+                className={`absolute w-2 h-2 rounded-full ${
+                  isRuler
+                    ? 'bg-rose-400 shadow-[0_0_8px_#f43f5e]'
+                    : isCelestial || isFullyCharged
+                    ? 'bg-yellow-200 shadow-[0_0_12px_#fef08a]'
+                    : 'bg-cyan-300 shadow-[0_0_8px_#22d3ee]'
+                }`}
+              />
+            </div>
+            {player.isDrawingBow && (
+              <div className="mt-4 px-2.5 py-0.5 rounded-full bg-slate-950/85 border border-amber-300/60 text-[10px] font-mono font-extrabold text-amber-200 whitespace-nowrap shadow-lg">
+                VISÉE ARC CÉLESTE • {Math.round(player.bowCharge * 100)}% • RELÂCHER CLIC GAUCHE
+              </div>
+            )}
           </div>
         ) : (
           <div

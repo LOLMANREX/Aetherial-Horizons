@@ -76,6 +76,8 @@ interface MainMenuProps {
   onTestMiniGameValves3D?: () => void;
   onTestElytraFlight3D?: () => void;
   onTestSixMonthsVirus?: () => void;
+  onTestDesktopCombatDrones?: () => void;
+  onTestCelestialBow?: () => void;
   onTestDefeatBombEnding?: () => void;
   onTestVictoryChainedEnding?: () => void;
   onRestartTransition3D?: () => void;
@@ -126,6 +128,8 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   onTestMiniGameValves3D,
   onTestElytraFlight3D,
   onTestSixMonthsVirus,
+  onTestDesktopCombatDrones,
+  onTestCelestialBow,
   onTestDefeatBombEnding,
   onTestVictoryChainedEnding,
   onRestartTransition3D,
@@ -990,6 +994,20 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                     </button>
                   )}
 
+                  {onTestCelestialBow && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOptionsOpen(false);
+                        onTestCelestialBow();
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-300 via-yellow-200 to-cyan-300 hover:from-amber-200 hover:to-cyan-200 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      Tester Tir Arc Céleste
+                    </button>
+                  )}
+
                   {onTestSixMonthsVirus && (
                     <button
                       type="button"
@@ -1000,7 +1018,21 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                       className="w-full py-2.5 rounded-xl bg-amber-500/25 hover:bg-amber-500/35 text-amber-200 border border-amber-400/50 font-extrabold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
                     >
                       <Monitor className="w-4 h-4 text-amber-300" />
-                      Tester Attaque Virus (6 mois plus tard)
+                      Tester Transition Complète Virus -&gt; Alt+Tab -&gt; Sortie Steve
+                    </button>
+                  )}
+
+                  {onTestDesktopCombatDrones && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOptionsOpen(false);
+                        onTestDesktopCombatDrones();
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-emerald-500/25 hover:bg-emerald-500/35 text-emerald-200 border border-emerald-400/50 font-extrabold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <Play className="w-4 h-4 text-emerald-300" />
+                      Tester Combat Bureau (Virus + Drones)
                     </button>
                   )}
 

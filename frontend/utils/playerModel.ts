@@ -383,13 +383,13 @@ export function buildDetailedBowMesh(): {
   let currentCorruptedState = false;
   let currentCelestialState = false;
   const setCorruptedMode = (corrupted: boolean, celestial = false, timeSec = 0) => {
-    if (celestial) {
+    if (!corrupted) {
       stellarRing.rotation.z = timeSec * 2.4;
     }
     if (currentCorruptedState === corrupted && currentCelestialState === celestial) return;
     currentCorruptedState = corrupted;
     currentCelestialState = celestial;
-    stellarBowHaloGroup.visible = celestial;
+    stellarBowHaloGroup.visible = !corrupted;
 
     if (corrupted) {
       woodMat.color.setHex(0x0f071e);
@@ -1344,16 +1344,24 @@ export function createHumanoidCharacter(): HumanoidCharacter {
       }
     }
 
-    if (equippedWeapon === 'SWORD' && attackProgress > 0) {
-      const swingCurve = Math.sin(attackProgress * Math.PI);
-      const slashRotX =
-        attackProgress < 0.28
-          ? 0.2 + (attackProgress / 0.28) * 1.35
-          : 1.55 - ((attackProgress - 0.28) / 0.72) * 2.45;
+    if (equippedWeapon === 'SWORD') {
+      tpNockedArrow.position.set(0, 0, 0);
+      tpUpperString.position.set(0, 0.22, 0.18);
+      tpUpperString.rotation.x = 0;
+      tpLowerString.position.set(0, -0.22, 0.18);
+      tpLowerString.rotation.x = 0;
 
-      rightArmPivot.rotation.x = slashRotX;
-      rightArmPivot.rotation.z = -0.35 * swingCurve;
-      torsoPivot.rotation.y = swingCurve * 0.42;
+      if (attackProgress > 0) {
+        const swingCurve = Math.sin(attackProgress * Math.PI);
+        const slashRotX =
+          attackProgress < 0.28
+            ? 0.2 + (attackProgress / 0.28) * 1.35
+            : 1.55 - ((attackProgress - 0.28) / 0.72) * 2.45;
+
+        rightArmPivot.rotation.x = slashRotX;
+        rightArmPivot.rotation.z = -0.35 * swingCurve;
+        torsoPivot.rotation.y = swingCurve * 0.42;
+      }
     } else if (equippedWeapon === 'BOW') {
       const isDrawingOrReleasing = bowDrawProgress > 0.01 || bowReleaseTimer > 0;
       const pullBackZ = bowDrawProgress * 0.24;

@@ -40,6 +40,7 @@ export type DesktopMiniGameInitialMode =
   | 'MINIGAME_VALVES'
   | 'ELYTRA_FLIGHT_3D'
   | 'SIX_MONTHS_VIRUS'
+  | 'DESKTOP_COMBAT_DRONES'
   | 'DEFEAT_CINEMATIC'
   | 'VICTORY_CINEMATIC';
 
@@ -233,7 +234,8 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
       mode === 'MINIGAME_HOLOGRAM' ||
       mode === 'MINIGAME_VALVES' ||
       mode === 'ELYTRA_FLIGHT_3D' ||
-      mode === 'SIX_MONTHS_VIRUS'
+      mode === 'SIX_MONTHS_VIRUS' ||
+      mode === 'DESKTOP_COMBAT_DRONES'
     ) {
       return 'EPILOGUE_SEQUENCE';
     }
@@ -248,6 +250,7 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
     if (mode === 'MINIGAME_VALVES') return 'MINIGAME_VALVES';
     if (mode === 'ELYTRA_FLIGHT_3D') return 'ELYTRA_FLIGHT_3D';
     if (mode === 'SIX_MONTHS_VIRUS') return 'SIX_MONTHS_VIRUS';
+    if (mode === 'DESKTOP_COMBAT_DRONES') return 'DESKTOP_COMBAT_DRONES';
     return 'HANGAR_HUB';
   };
 

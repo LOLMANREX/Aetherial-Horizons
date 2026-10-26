@@ -269,6 +269,7 @@ export function App() {
     attackDuration: 0.36,
     swordHitDealt: false,
     isDrawingBow: false,
+    isRightClickAiming: false,
     bowDrawProgress: 0,
     bowAutoReleaseOnFull: false,
     bowCooldownTimer: 0,
@@ -395,13 +396,20 @@ export function App() {
   };
 
   const handleSelectWeapon = useCallback((weapon: WeaponType) => {
-    gameRef.current.equippedWeapon = weapon;
-    gameRef.current.isDrawingBow = false;
-    gameRef.current.bowDrawProgress = 0;
-    gameRef.current.bowAutoReleaseOnFull = false;
+    const st = gameRef.current;
+    st.equippedWeapon = weapon;
+    st.attackTimer = 0;
+    st.swordHitDealt = false;
+    st.isDrawingBow = false;
+    st.isRightClickAiming = false;
+    st.bowDrawProgress = 0;
+    st.bowAutoReleaseOnFull = false;
+    st.bowReleaseAnimTimer = 0;
+    st.bowCooldownTimer = 0;
     setPlayerStats((prev) => ({
       ...prev,
       equippedWeapon: weapon,
+      isAttacking: false,
       isDrawingBow: false,
       bowCharge: 0,
     }));
@@ -1790,6 +1798,69 @@ export function App() {
     setDesktopMiniGameTriggerKey((prev) => prev + 1);
   }, [triggerCollapseBreakthrough]);
 
+  const handleTestDesktopCombatDrones = useCallback(() => {
+    triggerCollapseBreakthrough();
+    gameRef.current.collapseTimer = 5.0;
+    setCollapseTime(5.0);
+    setDesktopMiniGameMode('DESKTOP_COMBAT_DRONES');
+    setDesktopMiniGameTriggerKey((prev) => prev + 1);
+  }, [triggerCollapseBreakthrough]);
+
+  const handleTestCelestialBow = useCallback(() => {
+    const st = gameRef.current;
+    const spawnZ = 20;
+    const spawnY = getTerrainHeight(0, spawnZ) + 2.0;
+    st.playerPos.set(0, spawnY, spawnZ);
+    st.playerVel.set(0, 0, 0);
+    st.yaw = 0;
+    st.pitch = 0.02;
+    st.health = 100;
+    st.stamina = 100;
+    st.oxygen = 100;
+    st.arrows = 50;
+    st.equippedWeapon = 'BOW';
+    st.isDrawingBow = false;
+    st.isRightClickAiming = false;
+    st.bowDrawProgress = 0;
+    st.bowAutoReleaseOnFull = false;
+    st.attackTimer = 0;
+
+    respawnEnemiesAndLoot();
+    for (let i = 0; i < Math.min(4, st.enemyInstances.length); i++) {
+      const en = st.enemyInstances[i];
+      const ex = (i - 1.5) * 4.5;
+      const ez = 4;
+      const ey = getTerrainHeight(ex, ez);
+      en.alive = true;
+      en.maxHp = 180;
+      en.hp = 180;
+      en.position.set(ex, ey, ez);
+      en.homePos.set(ex, ey, ez);
+      en.group.position.set(ex, ey, ez);
+      en.group.visible = true;
+      en.hpBarGroup.visible = true;
+      en.hpBarFill.scale.x = 1;
+    }
+
+    setPlayerStats((prev) => ({
+      ...prev,
+      health: 100,
+      stamina: 100,
+      arrows: 50,
+      equippedWeapon: 'BOW',
+      isDrawingBow: false,
+      bowCharge: 0,
+    }));
+
+    soundFX.init();
+    soundFX.playOrbCollect(9);
+    updateScreen('PLAYING');
+    requestLockSafe();
+    showToast(
+      'TEST ARC CÉLESTE : Clic Droit maintenu pour viser, Clic Gauche relâché pour tirer la comète !'
+    );
+  }, [requestLockSafe, respawnEnemiesAndLoot, showToast, updateScreen]);
+
   const handleTestDefeatBombEnding = useCallback(() => {
     triggerCollapseBreakthrough();
     gameRef.current.collapseTimer = 5.0;
@@ -3085,27 +3156,27 @@ export function App() {
       const st = gameRef.current;
       const isCorrupted = st.endingChoice === 'RULE_WORLD';
       const isTranscendent = st.endingChoice === 'SAVE_WORLD';
-      st.isDrawingBow = false;
-      st.bowDrawProgress = 0;
+      const keepAiming = st.isRightClickAiming;
+      st.isDrawingBow = keepAiming;
+      st.bowDrawProgress = keepAiming ? 0.08 : 0;
       st.bowAutoReleaseOnFull = false;
 
-      if (!isCorrupted && !isTranscendent && st.arrows <= 0) {
-        return;
-      }
-
       if (!isCorrupted && !isTranscendent) {
-        st.arrows -= 1;
+        if (st.arrows > 1) {
+          st.arrows -= 1;
+        } else {
+          st.arrows = 12;
+        }
       }
-      st.bowCooldownTimer = isCorrupted || isTranscendent ? 0.22 : 0.38;
+      st.bowCooldownTimer = 0.16;
       st.bowReleaseAnimTimer = 0.18;
 
+      soundFX.init();
       if (isCorrupted) {
         soundFX.playLightningDash();
-      } else if (isTranscendent) {
-        soundFX.playBowShoot();
-        soundFX.playOrbCollect(9);
       } else {
         soundFX.playBowShoot();
+        soundFX.playOrbCollect(9);
       }
 
       camera.updateMatrixWorld(true);
@@ -3122,18 +3193,18 @@ export function App() {
       const rayOrigin = crosshairRaycaster.ray.origin;
       const rayDir = crosshairRaycaster.ray.direction;
 
-      let aimDistance = 32;
+      let aimDistance = 42;
       if (st.bossInstance && st.bossInstance.active && !st.bossInstance.defeated) {
         const bossCenter = new THREE.Vector3(
           st.bossInstance.position.x,
-          st.bossInstance.position.y + 5.2,
+          st.bossInstance.position.y + (st.isDimensionalClashActive ? 1.4 : 4.8),
           st.bossInstance.position.z
         );
         const toBoss = bossCenter.sub(rayOrigin);
         const proj = toBoss.dot(rayDir);
-        if (proj > 3 && proj < 85) {
+        if (proj > 2 && proj < 110) {
           const perpDistSq = toBoss.lengthSq() - proj * proj;
-          if (perpDistSq < 18.0) {
+          if (perpDistSq < 28.0) {
             aimDistance = proj;
           }
         }
@@ -3149,9 +3220,9 @@ export function App() {
         );
         const toEnemy = enemyCenter.sub(rayOrigin);
         const proj = toEnemy.dot(rayDir);
-        if (proj > 3 && proj < 65) {
+        if (proj > 2 && proj < 95) {
           const perpDistSq = toEnemy.lengthSq() - proj * proj;
-          if (perpDistSq < 4.0) {
+          if (perpDistSq < 9.5) {
             aimDistance = proj;
             break;
           }
@@ -3184,51 +3255,31 @@ export function App() {
         return;
       }
 
-      if (isTranscendent) {
-        const cometSpeed = 60;
-        const cometVel = dirToTarget.multiplyScalar(cometSpeed);
-        const cometMesh = createCometArrowProjectileMesh();
-        cometMesh.position.copy(spawnPos);
-        cometMesh.lookAt(spawnPos.clone().add(cometVel));
-        scene.add(cometMesh);
-
-        st.arrowProjectiles.push({
-          mesh: cometMesh,
-          position: spawnPos,
-          velocity: cometVel,
-          age: 0,
-          active: true,
-          isLightningBolt: false,
-          isCosmicArrow: true,
-        });
-        return;
-      }
-
-      const arrowSpeed = 26 + charge * 12;
-
+      const cometSpeed = 48 + Math.max(0.35, charge) * 18;
       const distToTarget = spawnPos.distanceTo(targetPoint);
-      const flightTime = distToTarget / arrowSpeed;
-      const gravityDropCompensation = 0.5 * ARROW_GRAVITY * flightTime * flightTime;
+      const flightTime = distToTarget / cometSpeed;
+      const gravityDropCompensation =
+        0.5 * (ARROW_GRAVITY * 0.14) * flightTime * flightTime;
 
       const ballisticAimPoint = targetPoint
         .clone()
-        .add(new THREE.Vector3(0, Math.min(gravityDropCompensation, 3.2), 0));
+        .add(new THREE.Vector3(0, Math.min(gravityDropCompensation, 1.4), 0));
 
       const launchDir = ballisticAimPoint.sub(spawnPos).normalize();
-      const arrowVel = launchDir.multiplyScalar(arrowSpeed);
-
-      const arrowMesh = createArrowProjectileMesh();
-      arrowMesh.position.copy(spawnPos);
-      arrowMesh.lookAt(spawnPos.clone().add(arrowVel));
-      scene.add(arrowMesh);
+      const cometVel = launchDir.multiplyScalar(cometSpeed);
+      const cometMesh = createCometArrowProjectileMesh();
+      cometMesh.position.copy(spawnPos);
+      cometMesh.lookAt(spawnPos.clone().add(cometVel));
+      scene.add(cometMesh);
 
       st.arrowProjectiles.push({
-        mesh: arrowMesh,
+        mesh: cometMesh,
         position: spawnPos,
-        velocity: arrowVel,
+        velocity: cometVel,
         age: 0,
         active: true,
         isLightningBolt: false,
+        isCosmicArrow: true,
       });
     };
 
@@ -3236,36 +3287,29 @@ export function App() {
       const st = gameRef.current;
       if (st.screen !== 'PLAYING' || st.isFadingTransition) return;
 
-      if (st.equippedWeapon === 'SWORD') {
+      if (st.equippedWeapon === 'SWORD' && !st.isRightClickAiming) {
         if (st.attackTimer > 0) return;
         st.attackDuration = 0.36;
         st.attackTimer = st.attackDuration;
         st.swordHitDealt = false;
         soundFX.playSwordSwing();
-      } else if (st.equippedWeapon === 'BOW') {
-        if (st.bowCooldownTimer > 0 || st.isDrawingBow) return;
-        if (st.endingChoice === 'RULE_WORLD' || st.endingChoice === 'SAVE_WORLD') {
-          fireChargedBowArrow(1.0);
-          return;
+      } else {
+        st.equippedWeapon = 'BOW';
+        if (!st.isDrawingBow) {
+          st.isDrawingBow = true;
+          st.bowDrawProgress = Math.max(st.bowDrawProgress, 0.12);
+          st.bowAutoReleaseOnFull = false;
+          soundFX.init();
+          soundFX.playBowDraw();
         }
-        if (st.arrows <= 0) {
-          showToast('Plus de flèches ! Fouillez un camp ou tuez des ennemis.');
-          return;
-        }
-        st.isDrawingBow = true;
-        st.bowDrawProgress = 0.02;
-        st.bowAutoReleaseOnFull = false;
-        soundFX.playBowDraw();
       }
     };
 
     const releasePrimaryWeaponAction = () => {
       const st = gameRef.current;
-      if (st.equippedWeapon === 'BOW' && st.isDrawingBow) {
-        if (st.bowDrawProgress >= 0.45) {
-          fireChargedBowArrow(st.bowDrawProgress);
-        } else {
-          st.bowAutoReleaseOnFull = true;
+      if (st.equippedWeapon === 'BOW' || st.isRightClickAiming || st.isDrawingBow) {
+        if (st.bowCooldownTimer <= 0) {
+          fireChargedBowArrow(Math.max(0.55, st.bowDrawProgress));
         }
       }
     };
@@ -3423,21 +3467,49 @@ export function App() {
 
     const onMouseDown = (e: MouseEvent) => {
       if (gameRef.current.screen !== 'PLAYING') return;
-      if (e.button === 0) {
-        gameRef.current.mouseCaptured = true;
-        setIsMouseCaptured(true);
-        gameRef.current.isDraggingFallback = true;
-        gameRef.current.mouseDownPos = { x: e.clientX, y: e.clientY };
-        gameRef.current.lastMousePos = { x: e.clientX, y: e.clientY };
+      gameRef.current.mouseCaptured = true;
+      setIsMouseCaptured(true);
+      gameRef.current.isDraggingFallback = true;
+      gameRef.current.mouseDownPos = { x: e.clientX, y: e.clientY };
+      gameRef.current.lastMousePos = { x: e.clientX, y: e.clientY };
+
+      if (e.button === 2) {
+        e.preventDefault();
+        const st = gameRef.current;
+        st.equippedWeapon = 'BOW';
+        st.attackTimer = 0;
+        st.swordHitDealt = false;
+        st.isRightClickAiming = true;
+        st.isDrawingBow = true;
+        st.bowDrawProgress = Math.max(st.bowDrawProgress, 0.12);
+        st.bowAutoReleaseOnFull = false;
+        soundFX.init();
+        soundFX.playBowDraw();
+      } else if (e.button === 0) {
         startPrimaryWeaponAction();
       }
     };
 
     const onMouseUp = (e: MouseEvent) => {
-      if (e.button === 0 && gameRef.current.screen === 'PLAYING') {
-        releasePrimaryWeaponAction();
+      const st = gameRef.current;
+      if (st.screen === 'PLAYING') {
+        if (e.button === 0) {
+          releasePrimaryWeaponAction();
+        } else if (e.button === 2) {
+          if (st.isDrawingBow && st.bowDrawProgress >= 0.45 && st.bowReleaseAnimTimer <= 0) {
+            st.isRightClickAiming = false;
+            fireChargedBowArrow(st.bowDrawProgress);
+          } else {
+            st.isRightClickAiming = false;
+            st.isDrawingBow = false;
+            st.bowDrawProgress = 0;
+            st.bowAutoReleaseOnFull = false;
+          }
+        }
       }
-      gameRef.current.isDraggingFallback = false;
+      if (!st.isRightClickAiming) {
+        st.isDraggingFallback = false;
+      }
     };
 
     const onResize = () => {
@@ -4939,6 +5011,10 @@ export function App() {
         );
         camera.up.set(0, 1, 0);
 
+        const isAimingBowView =
+          state.equippedWeapon === 'BOW' &&
+          (state.isDrawingBow || state.isRightClickAiming);
+
         if (state.cameraMode === 'FIRST_PERSON') {
           camera.position.set(
             state.playerPos.x,
@@ -4947,13 +5023,18 @@ export function App() {
           );
           camera.rotation.set(state.pitch, state.yaw, 0, 'YXZ');
         } else {
-          const camDist = 5.6;
-          const pivotY = state.playerPos.y + 0.15;
+          const camDist = isAimingBowView ? 3.7 : 5.6;
+          const shoulderRight = isAimingBowView ? 0.62 : 0;
+          const rightVecX = Math.cos(state.yaw) * shoulderRight;
+          const rightVecZ = -Math.sin(state.yaw) * shoulderRight;
+          const pivotY = state.playerPos.y + (isAimingBowView ? 0.28 : 0.15);
           const camX =
             state.playerPos.x +
+            rightVecX +
             Math.sin(state.yaw) * Math.cos(state.pitch) * camDist;
           const camZ =
             state.playerPos.z +
+            rightVecZ +
             Math.cos(state.yaw) * Math.cos(state.pitch) * camDist;
           const camTerrainY = getTerrainHeight(camX, camZ) + 0.8;
           const camY = Math.max(
@@ -4962,15 +5043,18 @@ export function App() {
           );
 
           camera.position.set(camX, camY, camZ);
-          camera.lookAt(state.playerPos.x, pivotY, state.playerPos.z);
+          camera.lookAt(
+            state.playerPos.x + rightVecX - Math.sin(state.yaw) * 14,
+            pivotY + Math.sin(state.pitch) * 14,
+            state.playerPos.z + rightVecZ - Math.cos(state.yaw) * 14
+          );
         }
 
-        const targetFov =
-          state.equippedWeapon === 'BOW' && state.isDrawingBow
-            ? 70 - state.bowDrawProgress * 10
-            : 70;
+        const targetFov = isAimingBowView
+          ? 54 - state.bowDrawProgress * 8
+          : 70;
         if (Math.abs(camera.fov - targetFov) > 0.05) {
-          camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, Math.min(1, dt * 10));
+          camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, Math.min(1, dt * 12));
           camera.updateProjectionMatrix();
         }
 
@@ -5138,10 +5222,11 @@ export function App() {
           if (!arrow.active) continue;
 
           arrow.age += dt;
-          if (!arrow.isLightningBolt && !arrow.isCosmicArrow) {
-            arrow.velocity.y -= ARROW_GRAVITY * dt;
+          if (!arrow.isLightningBolt) {
+            arrow.velocity.y -= (arrow.isCosmicArrow ? ARROW_GRAVITY * 0.14 : ARROW_GRAVITY) * dt;
           }
 
+          const prevPos = arrow.position.clone();
           const nextPos = arrow.position
             .clone()
             .addScaledVector(arrow.velocity, dt);
@@ -5201,14 +5286,14 @@ export function App() {
                 type: 'NOVA_RING',
               });
               showToast("L'Autre Réalité pare votre tir et contre-attaque dans votre dos !");
-            } else if (distB2 < (state.isDimensionalClashActive ? 4.5 : 7.5) && Math.abs(dyB) < 5.0) {
+            } else if (distB2 < (state.isDimensionalClashActive ? 9.5 : 14.0) && Math.abs(dyB) < 5.5) {
               const horizLen = Math.max(
                 0.01,
                 Math.hypot(arrow.velocity.x, arrow.velocity.z)
               );
               damageBoss(
                 boss,
-                Math.round(70 * damageMultiplier),
+                Math.round(85 * damageMultiplier),
                 arrow.velocity.x / horizLen,
                 arrow.velocity.z / horizLen
               );
@@ -5217,23 +5302,61 @@ export function App() {
           }
 
           if (!hitSomething) {
+            const segVec = nextPos.clone().sub(prevPos);
+            const segLenSq = Math.max(0.0001, segVec.lengthSq());
+
             for (let e = 0; e < state.enemyInstances.length; e++) {
               const enemy = state.enemyInstances[e];
               if (!enemy.alive) continue;
-              const dx = arrow.position.x - enemy.position.x;
-              const dz = arrow.position.z - enemy.position.z;
-              const dy = arrow.position.y - (enemy.position.y + 1.15);
-              if (dx * dx + dz * dz < 1.5 && Math.abs(dy) < 1.55) {
+              const enemyCenter = new THREE.Vector3(
+                enemy.position.x,
+                enemy.position.y + 1.15,
+                enemy.position.z
+              );
+              const tSeg = THREE.MathUtils.clamp(
+                enemyCenter.clone().sub(prevPos).dot(segVec) / segLenSq,
+                0,
+                1
+              );
+              const closestPt = prevPos.clone().addScaledVector(segVec, tSeg);
+              const dx = closestPt.x - enemy.position.x;
+              const dz = closestPt.z - enemy.position.z;
+              const dy = closestPt.y - (enemy.position.y + 1.15);
+              if (dx * dx + dz * dz < 5.8 && Math.abs(dy) < 2.5) {
                 const horizLen = Math.max(
                   0.01,
                   Math.hypot(arrow.velocity.x, arrow.velocity.z)
                 );
                 damageEnemy(
                   enemy,
-                  Math.round((arrow.isLightningBolt || arrow.isCosmicArrow ? 80 : 55) * damageMultiplier),
+                  Math.round(95 * damageMultiplier),
                   arrow.velocity.x / horizLen,
                   arrow.velocity.z / horizLen
                 );
+                const cometHitRing = new THREE.Mesh(
+                  new THREE.RingGeometry(0.4, 2.2, 24),
+                  new THREE.MeshBasicMaterial({
+                    color: 0xfef08a,
+                    transparent: true,
+                    opacity: 0.9,
+                    side: THREE.DoubleSide,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false,
+                  })
+                );
+                cometHitRing.rotation.x = -Math.PI / 2;
+                cometHitRing.position.set(
+                  enemy.position.x,
+                  enemy.position.y + 1.0,
+                  enemy.position.z
+                );
+                scene.add(cometHitRing);
+                state.visualEffects.push({
+                  mesh: cometHitRing,
+                  age: 0,
+                  maxAge: 0.35,
+                  type: 'NOVA_RING',
+                });
                 hitSomething = true;
                 break;
               }
@@ -6225,6 +6348,8 @@ export function App() {
         onTestMiniGameValves3D={handleTestMiniGameValves3D}
         onTestElytraFlight3D={handleTestElytraFlight3D}
         onTestSixMonthsVirus={handleTestSixMonthsVirus}
+        onTestDesktopCombatDrones={handleTestDesktopCombatDrones}
+        onTestCelestialBow={handleTestCelestialBow}
         onTestDefeatBombEnding={handleTestDefeatBombEnding}
         onTestVictoryChainedEnding={handleTestVictoryChainedEnding}
         onRestartTransition3D={handleRestartTransition3D}

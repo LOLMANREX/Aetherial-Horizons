@@ -23,8 +23,9 @@ export type EpilogueStartSubPhase =
   | 'MINIGAME_PARKOUR'
   | 'MINIGAME_HOLOGRAM'
   | 'MINIGAME_VALVES'
-  | 'ELYTRA_FLIGHT_3D'
-  | 'SIX_MONTHS_VIRUS';
+  | 'SIX_MONTHS_VIRUS'
+  | 'DESKTOP_COMBAT_DRONES'
+  | 'ELYTRA_FLIGHT_3D';
 
 export interface EpilogueMinecraftSequenceProps {
   initialSubPhase?: EpilogueStartSubPhase;
@@ -37,9 +38,28 @@ type SequenceStage =
   | 'HANGAR_3D'
   | 'ROCKET_LAUNCH_3D'
   | 'TYPEWRITER_6_MONTHS'
-  | 'WINDOWS_BREACH_TRANSITION'
+  | 'NEW_DESKTOP_BREACH'
+  | 'MINECRAFT_WINDOW_EXIT'
+  | 'DESKTOP_COMBAT_DRONES'
   | 'ELYTRA_3D'
   | 'CONFRONTATION_3D';
+
+interface DesktopMinion {
+  id: number;
+  kind: 'DRONE' | 'ZOMBIE';
+  x: number;
+  y: number;
+  speed: number;
+}
+
+interface DesktopVirusOrb {
+  id: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  reflected: boolean;
+}
 
 interface ServerRackPlatform3D {
   group: THREE.Group;
@@ -289,6 +309,7 @@ export const EpilogueMinecraftSequence: React.FC<EpilogueMinecraftSequenceProps>
   const resolveInitialStage = (sub: EpilogueStartSubPhase): SequenceStage => {
     if (sub === 'ELYTRA_FLIGHT_3D') return 'ELYTRA_3D';
     if (sub === 'SIX_MONTHS_VIRUS') return 'TYPEWRITER_6_MONTHS';
+    if (sub === 'DESKTOP_COMBAT_DRONES') return 'DESKTOP_COMBAT_DRONES';
     return 'HANGAR_3D';
   };
 
@@ -313,11 +334,52 @@ export const EpilogueMinecraftSequence: React.FC<EpilogueMinecraftSequenceProps>
 
   const [typewriterText, setTypewriterText] = useState<string>('');
   const [breachTimer, setBreachTimer] = useState<number>(0);
+  const [waitingForAltTab, setWaitingForAltTab] = useState<boolean>(false);
+  const [exitWindowTimer, setExitWindowTimer] = useState<number>(0);
+
+  const [stevePos, setStevePos] = useState<{ x: number; y: number }>({
+    x: 34,
+    y: 56,
+  });
+  const [steveHp, setSteveHp] = useState<number>(100);
+  const [steveSweepTimer, setSteveSweepTimer] = useState<number>(0);
+  const [steveSweepAngle, setSteveSweepAngle] = useState<number>(0);
+
+  const [virusPos, setVirusPos] = useState<{ x: number; y: number }>({
+    x: 76,
+    y: 44,
+  });
+  const [virusHp, setVirusHp] = useState<number>(100);
+  const [virusShield, setVirusShield] = useState<number>(100);
+  const [droneWave, setDroneWave] = useState<number>(1);
+  const [minions, setMinions] = useState<DesktopMinion[]>([]);
+  const [virusOrbs, setVirusOrbs] = useState<DesktopVirusOrb[]>([]);
 
   const [elytraProgress, setElytraProgress] = useState<number>(0);
   const [elytraHits, setElytraHits] = useState<number>(0);
   const [elytraBlur, setElytraBlur] = useState<number>(0);
   const [elytraBoostActive, setElytraBoostActive] = useState<boolean>(false);
+
+  const desktopCombatRef = useRef({
+    steveX: 34,
+    steveY: 56,
+    steveHp: 100,
+    sweepTimer: 0,
+    sweepAngle: 0,
+    dashCooldown: 0,
+    mouseX: 70,
+    mouseY: 45,
+    virusX: 76,
+    virusY: 44,
+    virusHp: 100,
+    virusShield: 100,
+    wave: 1,
+    spawnTimer: 0.4,
+    orbCooldown: 1.3,
+    nextEntityId: 1,
+    minions: [] as DesktopMinion[],
+    orbs: [] as DesktopVirusOrb[],
+  });
 
   const sim3DRef = useRef({
     stage: resolveInitialStage(initialSubPhase) as SequenceStage,
@@ -405,13 +467,84 @@ export const EpilogueMinecraftSequence: React.FC<EpilogueMinecraftSequenceProps>
     setValvesClosedCount(0);
     setTypewriterText('');
     setBreachTimer(0);
+    setWaitingForAltTab(false);
+    setExitWindowTimer(0);
+
+    desktopCombatRef.current = {
+      steveX: 34,
+      steveY: 56,
+      steveHp: 100,
+      sweepTimer: 0,
+      sweepAngle: 0,
+      dashCooldown: 0,
+      mouseX: 70,
+      mouseY: 45,
+      virusX: 76,
+      virusY: 44,
+      virusHp: 100,
+      virusShield: 100,
+      wave: 1,
+      spawnTimer: 0.4,
+      orbCooldown: 1.3,
+      nextEntityId: 1,
+      minions: [],
+      orbs: [],
+    };
+    setStevePos({ x: 34, y: 56 });
+    setSteveHp(100);
+    setSteveSweepTimer(0);
+    setVirusPos({ x: 76, y: 44 });
+    setVirusHp(100);
+    setVirusShield(100);
+    setDroneWave(1);
+    setMinions([]);
+    setVirusOrbs([]);
+
     setElytraProgress(0);
     setElytraHits(0);
     setElytraBlur(0);
   }, [initialSubPhase, triggerKey]);
 
+  const triggerAltTabToMinecraft = useCallback(() => {
+    if (stage !== 'NEW_DESKTOP_BREACH') return;
+    soundFX.init();
+    soundFX.playOrbCollect(10);
+    setWaitingForAltTab(false);
+    setExitWindowTimer(0);
+    sim3DRef.current.stage = 'MINECRAFT_WINDOW_EXIT';
+    setStage('MINECRAFT_WINDOW_EXIT');
+    showQuickToast(
+      'ALT + TAB DÉCLENCHÉ : Ouverture de Minecraft au premier plan !'
+    );
+  }, [stage, showQuickToast]);
+
   useEffect(() => {
-    if (stage !== 'TYPEWRITER_6_MONTHS' && stage !== 'WINDOWS_BREACH_TRANSITION') {
+    if (stage !== 'NEW_DESKTOP_BREACH') return;
+    const onAltTabKey = (e: KeyboardEvent) => {
+      if (
+        e.code === 'Tab' ||
+        e.key === 'Tab' ||
+        e.code === 'AltLeft' ||
+        e.code === 'AltRight' ||
+        e.altKey
+      ) {
+        e.preventDefault();
+        if (waitingForAltTab || breachTimer >= 2.8) {
+          triggerAltTabToMinecraft();
+        }
+      }
+    };
+    window.addEventListener('keydown', onAltTabKey);
+    return () => window.removeEventListener('keydown', onAltTabKey);
+  }, [stage, waitingForAltTab, breachTimer, triggerAltTabToMinecraft]);
+
+  useEffect(() => {
+    if (
+      stage !== 'TYPEWRITER_6_MONTHS' &&
+      stage !== 'NEW_DESKTOP_BREACH' &&
+      stage !== 'MINECRAFT_WINDOW_EXIT' &&
+      stage !== 'DESKTOP_COMBAT_DRONES'
+    ) {
       return;
     }
 
@@ -419,7 +552,9 @@ export const EpilogueMinecraftSequence: React.FC<EpilogueMinecraftSequenceProps>
     let lastTime = performance.now();
     let elapsed = 0;
     let lastChars = 0;
-    let crashPlayed = false;
+    let strikePlayed = false;
+    let shatterPlayed = false;
+    let stepOutPlayed = false;
 
     const tick = (now: number) => {
       rafId = requestAnimationFrame(tick);
@@ -430,7 +565,7 @@ export const EpilogueMinecraftSequence: React.FC<EpilogueMinecraftSequenceProps>
       if (stage === 'TYPEWRITER_6_MONTHS') {
         const chars = Math.min(
           TYPEWRITER_FULL_TEXT.length,
-          Math.floor(elapsed * 13)
+          Math.floor(elapsed * 14)
         );
         if (chars > lastChars) {
           lastChars = chars;
@@ -438,33 +573,273 @@ export const EpilogueMinecraftSequence: React.FC<EpilogueMinecraftSequenceProps>
           soundFX.playPickupAmmo();
           setTypewriterText(TYPEWRITER_FULL_TEXT.slice(0, chars));
         }
-        if (elapsed >= 3.8) {
+        if (elapsed >= 3.2) {
           elapsed = 0;
-          setStage('WINDOWS_BREACH_TRANSITION');
+          setBreachTimer(0);
+          setWaitingForAltTab(false);
+          sim3DRef.current.stage = 'NEW_DESKTOP_BREACH';
+          setStage('NEW_DESKTOP_BREACH');
         }
-      } else if (stage === 'WINDOWS_BREACH_TRANSITION') {
+      } else if (stage === 'NEW_DESKTOP_BREACH') {
         setBreachTimer(elapsed);
-        if (elapsed >= 1.1 && !crashPlayed) {
-          crashPlayed = true;
+        if (elapsed >= 1.1 && !strikePlayed) {
+          strikePlayed = true;
+          soundFX.init();
+          soundFX.playLightningDash();
+        }
+        if (elapsed >= 2.1 && !shatterPlayed) {
+          shatterPlayed = true;
           soundFX.init();
           soundFX.playPiercingGlitchCrash();
           soundFX.playBossSlam();
         }
-        if (elapsed >= 3.2) {
+        if (elapsed >= 3.1 && !waitingForAltTab) {
+          setWaitingForAltTab(true);
+        }
+      } else if (stage === 'MINECRAFT_WINDOW_EXIT') {
+        setExitWindowTimer(elapsed);
+        if (elapsed >= 0.95 && !stepOutPlayed) {
+          stepOutPlayed = true;
           soundFX.init();
+          soundFX.playBossSlam();
           soundFX.playLightningDash();
+          showQuickToast(
+            'STEVE SORT DU CADRE DE LA FENÊTRE MINECRAFT SUR LE BUREAU !'
+          );
+        }
+        if (elapsed >= 2.5) {
+          sim3DRef.current.stage = 'DESKTOP_COMBAT_DRONES';
+          setStage('DESKTOP_COMBAT_DRONES');
+        }
+      } else if (stage === 'DESKTOP_COMBAT_DRONES') {
+        const cb = desktopCombatRef.current;
+        const keys = sim3DRef.current.keys;
+
+        if (cb.sweepTimer > 0) {
+          cb.sweepTimer = Math.max(0, cb.sweepTimer - dt);
+        }
+        if (cb.dashCooldown > 0) {
+          cb.dashCooldown = Math.max(0, cb.dashCooldown - dt);
+        }
+
+        let moveX = 0;
+        let moveY = 0;
+        if (keys['KeyW'] || keys['KeyZ'] || keys['ArrowUp']) moveY -= 1;
+        if (keys['KeyS'] || keys['ArrowDown']) moveY += 1;
+        if (keys['KeyA'] || keys['KeyQ'] || keys['ArrowLeft']) moveX -= 1;
+        if (keys['KeyD'] || keys['ArrowRight']) moveX += 1;
+
+        const mLen = Math.hypot(moveX, moveY);
+        if (mLen > 0.01) {
+          const spd = keys['Space'] && cb.dashCooldown <= 0 ? 68 : 28;
+          if (keys['Space'] && cb.dashCooldown <= 0) {
+            cb.dashCooldown = 0.7;
+            soundFX.init();
+            soundFX.playLightningDash();
+          }
+          cb.steveX = Math.max(
+            8,
+            Math.min(92, cb.steveX + (moveX / mLen) * spd * dt)
+          );
+          cb.steveY = Math.max(
+            14,
+            Math.min(82, cb.steveY + (moveY / mLen) * spd * dt)
+          );
+        }
+
+        cb.virusX = 76 + Math.sin(now * 0.0022) * 8;
+        cb.virusY = 42 + Math.cos(now * 0.0028) * 14;
+
+        cb.spawnTimer -= dt;
+        if (cb.spawnTimer <= 0 && cb.minions.length < 7) {
+          cb.spawnTimer = cb.virusShield > 0 ? 1.35 : 2.2;
+          const batchCount = cb.minions.length === 0 ? 4 : 2;
+          for (let b = 0; b < batchCount; b++) {
+            const ang = (Math.random() - 0.5) * Math.PI * 1.4;
+            const kind: 'DRONE' | 'ZOMBIE' =
+              (cb.nextEntityId + b) % 2 === 0 ? 'DRONE' : 'ZOMBIE';
+            cb.minions.push({
+              id: cb.nextEntityId++,
+              kind,
+              x: Math.max(
+                10,
+                Math.min(90, cb.virusX - 6 + Math.cos(ang) * 8)
+              ),
+              y: Math.max(
+                14,
+                Math.min(82, cb.virusY + Math.sin(ang) * 12)
+              ),
+              speed: kind === 'DRONE' ? 18.5 : 14.0,
+            });
+          }
+        }
+
+        for (let i = cb.minions.length - 1; i >= 0; i--) {
+          const m = cb.minions[i];
+          const dx = cb.steveX - m.x;
+          const dy = cb.steveY - m.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist > 0.2) {
+            m.x += (dx / dist) * m.speed * dt;
+            m.y += (dy / dist) * m.speed * dt;
+          }
+          if (dist < 4.5) {
+            cb.minions.splice(i, 1);
+            cb.steveHp = Math.max(20, cb.steveHp - 8);
+            soundFX.init();
+            soundFX.playPlayerHurt();
+          }
+        }
+
+        cb.orbCooldown -= dt;
+        if (cb.orbCooldown <= 0) {
+          cb.orbCooldown = 1.45;
+          const dx = cb.steveX - cb.virusX;
+          const dy = cb.steveY - cb.virusY;
+          const d = Math.max(1, Math.hypot(dx, dy));
+          cb.orbs.push({
+            id: cb.nextEntityId++,
+            x: cb.virusX,
+            y: cb.virusY,
+            vx: (dx / d) * 32,
+            vy: (dy / d) * 32,
+            reflected: false,
+          });
+        }
+
+        for (let i = cb.orbs.length - 1; i >= 0; i--) {
+          const o = cb.orbs[i];
+          o.x += o.vx * dt;
+          o.y += o.vy * dt;
+
+          if (!o.reflected) {
+            const dSteve = Math.hypot(o.x - cb.steveX, o.y - cb.steveY);
+            if (dSteve < 4.2) {
+              cb.orbs.splice(i, 1);
+              cb.steveHp = Math.max(20, cb.steveHp - 10);
+              soundFX.init();
+              soundFX.playPlayerHurt();
+              continue;
+            }
+          } else {
+            const dVirus = Math.hypot(o.x - cb.virusX, o.y - cb.virusY);
+            if (dVirus < 7.5) {
+              cb.orbs.splice(i, 1);
+              if (cb.virusShield > 0) {
+                cb.virusShield = Math.max(0, cb.virusShield - 18);
+              } else {
+                cb.virusHp = Math.max(0, cb.virusHp - 25);
+              }
+              soundFX.init();
+              soundFX.playEnemyHit(true);
+              continue;
+            }
+          }
+
+          if (o.x < 0 || o.x > 100 || o.y < 0 || o.y > 100) {
+            cb.orbs.splice(i, 1);
+          }
+        }
+
+        if (cb.virusHp <= 0) {
+          soundFX.init();
+          soundFX.playBossSlam();
+          soundFX.playLightningDash();
+          showQuickToast(
+            'VIRUS BATTU ! Il fuit par l’écran brisé — Steve plonge en Élytres 3D !'
+          );
           sim3DRef.current.stage = 'ELYTRA_3D';
           sim3DRef.current.elytraPos.set(0, 12, 0);
           sim3DRef.current.elytraDistance = 0;
           sim3DRef.current.elytraHits = 0;
           setStage('ELYTRA_3D');
+          return;
         }
+
+        setStevePos({ x: cb.steveX, y: cb.steveY });
+        setSteveHp(cb.steveHp);
+        setSteveSweepTimer(cb.sweepTimer);
+        setSteveSweepAngle(cb.sweepAngle);
+        setVirusPos({ x: cb.virusX, y: cb.virusY });
+        setVirusHp(cb.virusHp);
+        setVirusShield(cb.virusShield);
+        setDroneWave(cb.wave);
+        setMinions([...cb.minions]);
+        setVirusOrbs([...cb.orbs]);
       }
     };
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [stage]);
+  }, [stage, waitingForAltTab, showQuickToast]);
+
+  const handleDesktopCombatSweepAttack = useCallback(
+    (e?: React.MouseEvent<HTMLDivElement>) => {
+      if (stage !== 'DESKTOP_COMBAT_DRONES') return;
+      const cb = desktopCombatRef.current;
+      if (e) {
+        const rect = e.currentTarget.getBoundingClientRect();
+        cb.mouseX = ((e.clientX - rect.left) / Math.max(1, rect.width)) * 100;
+        cb.mouseY = ((e.clientY - rect.top) / Math.max(1, rect.height)) * 100;
+      }
+
+      cb.sweepTimer = 0.32;
+      cb.sweepAngle = Math.atan2(
+        cb.mouseY - cb.steveY,
+        cb.mouseX - cb.steveX
+      );
+      soundFX.init();
+      soundFX.playSwordSwing();
+
+      let killedInSweep = 0;
+      for (let i = cb.minions.length - 1; i >= 0; i--) {
+        const m = cb.minions[i];
+        const d = Math.hypot(m.x - cb.steveX, m.y - cb.steveY);
+        if (d < 19.5) {
+          cb.minions.splice(i, 1);
+          killedInSweep += 1;
+        }
+      }
+
+      if (killedInSweep > 0) {
+        soundFX.playEnemyHit(true);
+        const prevShield = cb.virusShield;
+        cb.virusShield = Math.max(0, cb.virusShield - killedInSweep * 14);
+        if (cb.virusShield <= 66 && cb.wave === 1) cb.wave = 2;
+        if (cb.virusShield <= 33 && cb.wave === 2) cb.wave = 3;
+        if (prevShield > 0 && cb.virusShield === 0) {
+          showQuickToast(
+            'BOUCLIER DU VIRUS BRISÉ ! Assénez-lui le coup de grâce avec l’Épée en Netherite !'
+          );
+        }
+      }
+
+      cb.orbs.forEach((o) => {
+        const dOrb = Math.hypot(o.x - cb.steveX, o.y - cb.steveY);
+        if (dOrb < 18.0 && !o.reflected) {
+          o.reflected = true;
+          const dx = cb.virusX - o.x;
+          const dy = cb.virusY - o.y;
+          const len = Math.max(1, Math.hypot(dx, dy));
+          o.vx = (dx / len) * 48;
+          o.vy = (dy / len) * 48;
+          soundFX.playEnemyHit(false);
+        }
+      });
+
+      const dBoss = Math.hypot(cb.virusX - cb.steveX, cb.virusY - cb.steveY);
+      if (dBoss < 21.0) {
+        if (cb.virusShield > 0) {
+          cb.virusShield = Math.max(0, cb.virusShield - 16);
+          soundFX.playEnemyHit(false);
+        } else {
+          cb.virusHp = Math.max(0, cb.virusHp - 28);
+          soundFX.playEnemyHit(true);
+        }
+      }
+    },
+    [stage, showQuickToast]
+  );
 
   useEffect(() => {
     const container = mount3DRef.current;
@@ -1800,55 +2175,407 @@ export const EpilogueMinecraftSequence: React.FC<EpilogueMinecraftSequenceProps>
         </div>
       )}
 
-      {stage === 'WINDOWS_BREACH_TRANSITION' && (
+      {(stage === 'NEW_DESKTOP_BREACH' ||
+        stage === 'MINECRAFT_WINDOW_EXIT' ||
+        stage === 'DESKTOP_COMBAT_DRONES') && (
         <div
-          className="fixed inset-0 z-50 flex flex-col justify-between overflow-hidden"
+          onMouseDown={
+            stage === 'DESKTOP_COMBAT_DRONES'
+              ? handleDesktopCombatSweepAttack
+              : undefined
+          }
+          onMouseMove={
+            stage === 'DESKTOP_COMBAT_DRONES'
+              ? (e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  desktopCombatRef.current.mouseX =
+                    ((e.clientX - rect.left) / Math.max(1, rect.width)) * 100;
+                  desktopCombatRef.current.mouseY =
+                    ((e.clientY - rect.top) / Math.max(1, rect.height)) * 100;
+                }
+              : undefined
+          }
+          className="fixed inset-0 z-50 flex flex-col justify-between overflow-hidden font-sans select-none"
           style={{
             background:
-              'linear-gradient(135deg, #0284c7 0%, #1d4ed8 50%, #0f172a 100%)',
+              'linear-gradient(135deg, #0284c7 0%, #1d4ed8 48%, #0f172a 100%)',
           }}
         >
-          <div className="m-6 p-4 rounded-2xl bg-slate-950/90 border border-rose-500/60 max-w-xl">
-            <div className="text-[10px] font-black uppercase tracking-widest text-rose-400">
-              NOUVEAU PC WINDOWS • FRAPPE ORBITALE SUR L’ICÔNE WI-FI
-            </div>
-            <div className="text-sm font-bold text-white mt-1">
-              Le coin inférieur droit de l’écran se brise ! Steve en armure de Netherite saute à travers la brèche en Élytres 3D !
-            </div>
-          </div>
+          <div className="relative flex-1 overflow-hidden">
+            <div className="absolute left-6 top-6 flex flex-col gap-5 z-10">
+              <div className="flex flex-col items-center w-20 text-center">
+                <div className="w-12 h-12 rounded-xl bg-sky-500/30 border border-sky-300/60 flex items-center justify-center">
+                  <Cpu className="w-6 h-6 text-sky-200" />
+                </div>
+                <span className="text-[11px] font-bold text-white mt-1 drop-shadow">
+                  Nouveau PC
+                </span>
+              </div>
 
-          <div className="relative flex-1">
-            {breachTimer < 1.2 && (
-              <svg viewBox="0 0 1000 600" className="w-full h-full">
-                <line
-                  x1="200"
-                  y1="0"
-                  x2={200 + (breachTimer / 1.2) * 760}
-                  y2={(breachTimer / 1.2) * 580}
-                  stroke="#ef4444"
-                  strokeWidth="12"
-                />
-              </svg>
-            )}
-            {breachTimer >= 1.1 && (
-              <div className="absolute right-0 bottom-0 w-96 h-80">
+              <button
+                type="button"
+                onClick={
+                  stage === 'NEW_DESKTOP_BREACH'
+                    ? triggerAltTabToMinecraft
+                    : undefined
+                }
+                className={`flex flex-col items-center w-20 text-center p-1.5 rounded-xl transition-all cursor-pointer ${
+                  stage === 'NEW_DESKTOP_BREACH' && breachTimer >= 2.1
+                    ? 'bg-emerald-500/35 border-2 border-emerald-300 shadow-[0_0_25px_rgba(16,185,129,0.9)] animate-bounce'
+                    : 'bg-emerald-900/30 border border-emerald-400/50'
+                }`}
+              >
+                <div className="w-12 h-12 rounded-lg bg-gradient-to-b from-emerald-500 to-amber-800 border-2 border-emerald-200 flex items-center justify-center font-mono font-black text-xs text-white">
+                  MC
+                </div>
+                <span className="text-[11px] font-extrabold text-emerald-200 mt-1 drop-shadow">
+                  Minecraft
+                </span>
+              </button>
+            </div>
+
+            {stage === 'NEW_DESKTOP_BREACH' &&
+              breachTimer >= 1.1 &&
+              breachTimer < 2.2 && (
+                <svg
+                  viewBox="0 0 1000 600"
+                  className="absolute inset-0 w-full h-full pointer-events-none z-20"
+                >
+                  <line
+                    x1="120"
+                    y1="0"
+                    x2={
+                      120 +
+                      Math.min(1, (breachTimer - 1.1) / 0.9) * 825
+                    }
+                    y2={Math.min(1, (breachTimer - 1.1) / 0.9) * 585}
+                    stroke="#ef4444"
+                    strokeWidth="14"
+                  />
+                  <circle
+                    cx={
+                      120 +
+                      Math.min(1, (breachTimer - 1.1) / 0.9) * 825
+                    }
+                    cy={Math.min(1, (breachTimer - 1.1) / 0.9) * 585}
+                    r="24"
+                    fill="#fef08a"
+                  />
+                </svg>
+              )}
+
+            {(stage !== 'NEW_DESKTOP_BREACH' || breachTimer >= 2.1) && (
+              <div className="absolute right-0 bottom-0 w-[360px] h-[290px] pointer-events-none z-20">
                 <svg viewBox="0 0 400 320" className="w-full h-full">
                   <polygon
-                    points="120,320 205,160 300,105 400,45 400,320"
-                    fill="#020008"
+                    points="110,320 195,155 295,95 400,35 400,320"
+                    fill="#03000a"
                     stroke="#f43f5e"
                     strokeWidth="5"
+                  />
+                  <polyline
+                    points="195,155 125,110 75,125"
+                    fill="none"
+                    stroke="#38bdf8"
+                    strokeWidth="3"
+                  />
+                  <polyline
+                    points="295,95 250,35 210,15"
+                    fill="none"
+                    stroke="#f43f5e"
+                    strokeWidth="3"
+                  />
+                  <polyline
+                    points="195,155 155,235 80,265"
+                    fill="none"
+                    stroke="#e2e8f0"
+                    strokeWidth="2.5"
                   />
                 </svg>
               </div>
             )}
+
+            {stage === 'NEW_DESKTOP_BREACH' && (
+              <>
+                <div className="absolute top-6 left-1/2 -translate-x-1/2 z-30 bg-slate-950/90 border border-white/20 rounded-2xl px-6 py-3 text-center backdrop-blur-md">
+                  <div className="text-[10px] font-mono font-black uppercase tracking-widest text-cyan-300">
+                    {breachTimer < 1.1
+                      ? 'ÉTAPE 1/4 • NOUVEAU BUREAU WINDOWS PROPRE'
+                      : breachTimer < 2.1
+                      ? 'ÉTAPE 2/4 • TRAÎNÉE ROUGE FRAPPANT L’ICÔNE RÉSEAU'
+                      : 'ÉTAPE 3/4 • FISSURATION DU COIN INFÉRIEUR DROIT & APPARITION DU VIRUS'}
+                  </div>
+                  <div className="text-xs sm:text-sm font-bold text-white mt-0.5">
+                    {breachTimer < 1.1
+                      ? '6 mois plus tard, votre nouvel ordinateur fonctionne paisiblement...'
+                      : breachTimer < 2.1
+                      ? 'ALERTE : L’ogive virale frappe l’icône Réseau dans la barre des tâches !'
+                      : 'Le coin inférieur droit est brisé ! Le Virus Primordial infiltre le bureau !'}
+                  </div>
+                </div>
+
+                {breachTimer >= 2.1 && (
+                  <div
+                    className="absolute z-25 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center"
+                    style={{ left: '78%', top: '54%' }}
+                  >
+                    <div className="w-24 h-24 rounded-full bg-rose-600/35 border-4 border-rose-500 shadow-[0_0_55px_rgba(244,63,94,0.95)] flex items-center justify-center animate-pulse">
+                      <ShieldAlert className="w-12 h-12 text-rose-200" />
+                    </div>
+                    <span className="mt-2 px-3 py-1 rounded-full bg-rose-950/95 border border-rose-400 text-[10px] font-mono font-black text-rose-200 uppercase">
+                      VIRUS PRIMORDIAL DÉTECTÉ
+                    </span>
+                  </div>
+                )}
+
+                {waitingForAltTab && (
+                  <div className="absolute inset-0 z-40 flex items-center justify-center bg-slate-950/45 backdrop-blur-[2px]">
+                    <div className="max-w-lg w-[92vw] bg-slate-950/95 border-2 border-amber-400 rounded-3xl p-6 text-center shadow-[0_0_80px_rgba(251,191,36,0.65)] space-y-4">
+                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300 text-amber-300 text-xs font-mono font-black uppercase">
+                        <Sparkles className="w-4 h-4" />
+                        ACTION REQUISE • NE PAS SKIPPER
+                      </div>
+                      <h2 className="text-2xl sm:text-3xl font-black text-white uppercase tracking-wide">
+                        APPUYEZ SUR ALT + TAB
+                      </h2>
+                      <p className="text-xs sm:text-sm text-slate-300">
+                        Basculez sur la fenêtre <strong className="text-emerald-300">Minecraft</strong> en arrière-plan (ou cliquez sur l’icône Minecraft qui clignote) pour appeler Steve en armure de Netherite à la rescousse !
+                      </p>
+                      <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+                        <button
+                          type="button"
+                          onClick={triggerAltTabToMinecraft}
+                          className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 via-yellow-300 to-emerald-400 text-slate-950 font-mono font-black text-sm uppercase shadow-[0_0_30px_rgba(251,191,36,0.6)] cursor-pointer animate-pulse"
+                        >
+                          [ ALT + TAB ] Ouvrir Minecraft au 1er Plan
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {(stage === 'MINECRAFT_WINDOW_EXIT' ||
+              stage === 'DESKTOP_COMBAT_DRONES') && (
+              <div
+                className="absolute left-[14%] top-[18%] w-[380px] sm:w-[440px] h-[250px] bg-slate-900/95 border-2 border-emerald-400/80 rounded-2xl shadow-[0_0_50px_rgba(16,185,129,0.4)] overflow-hidden z-15 pointer-events-none"
+              >
+                <div className="h-8 bg-slate-950 px-3 flex items-center justify-between border-b border-slate-800">
+                  <span className="text-[11px] font-mono font-bold text-emerald-300">
+                    Minecraft 1.21.4 — Singleplayer (Premier Plan)
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+                  </div>
+                </div>
+                <div
+                  className="w-full h-full flex flex-col items-center justify-center p-4 text-center"
+                  style={{
+                    background:
+                      'linear-gradient(180deg, #38bdf8 0%, #bae6fd 55%, #15803d 55%, #14532d 100%)',
+                  }}
+                >
+                  <div className="px-3 py-1 rounded bg-slate-950/80 text-[10px] font-mono font-bold text-emerald-300">
+                    {stage === 'MINECRAFT_WINDOW_EXIT' && exitWindowTimer < 0.95
+                      ? 'Steve équipe son Épée en Netherite...'
+                      : 'Cadre de fenêtre franchi — Steve est sur le Bureau !'}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {stage === 'MINECRAFT_WINDOW_EXIT' && (
+              <>
+                <div className="absolute top-6 left-1/2 -translate-x-1/2 z-40 bg-slate-950/92 border-2 border-emerald-400 rounded-2xl px-6 py-3 text-center shadow-2xl">
+                  <div className="text-[10px] font-mono font-black uppercase tracking-widest text-emerald-300">
+                    ALT + TAB ACTIVÉ • SORTIE HORS DU CADRE DE LA FENÊTRE
+                  </div>
+                  <div className="text-xs sm:text-sm font-bold text-white mt-0.5">
+                    Steve enjambe la bordure de la fenêtre Minecraft et pose le pied sur votre Bureau Windows !
+                  </div>
+                </div>
+
+                <div
+                  className="absolute z-35 -translate-x-1/2 -translate-y-1/2 transition-all duration-150 flex flex-col items-center"
+                  style={{
+                    left: `${28 + Math.min(1, exitWindowTimer / 2.2) * 14}%`,
+                    top: `${36 + Math.min(1, exitWindowTimer / 2.2) * 22}%`,
+                    transform: `translate(-50%, -50%) scale(${
+                      0.85 + Math.min(1, exitWindowTimer / 2.2) * 0.35
+                    })`,
+                  }}
+                >
+                  <div className="w-16 h-20 rounded-xl bg-zinc-800 border-2 border-purple-400 shadow-[0_0_35px_rgba(168,85,247,0.85)] flex flex-col items-center justify-center">
+                    <div className="w-8 h-2 bg-cyan-300 mb-1" />
+                    <Swords className="w-7 h-7 text-purple-300" />
+                  </div>
+                  <span className="mt-1.5 px-2.5 py-0.5 rounded bg-slate-950/90 border border-purple-400 text-[10px] font-mono font-black text-purple-200">
+                    STEVE (NETHERITE)
+                  </span>
+                </div>
+              </>
+            )}
+
+            {stage === 'DESKTOP_COMBAT_DRONES' && (
+              <>
+                <div className="absolute top-4 left-4 right-4 z-30 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
+                  <div className="bg-slate-950/92 border border-purple-400/70 rounded-2xl px-4 py-2.5 backdrop-blur-md">
+                    <div className="text-[10px] font-mono font-black uppercase tracking-widest text-purple-300">
+                      COMBAT SUR LE BUREAU • VAGUE DE DRONES / ZOMBIES {droneWave} / 3
+                    </div>
+                    <div className="text-xs font-bold text-white mt-0.5">
+                      ZQSD/Flèches : Bouger Steve • CLIC GAUCHE : Balayage Épée Netherite (One-Shot les Drones &amp; Zombies) • ESPACE : Dash
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3 bg-slate-950/92 border border-rose-500/60 rounded-2xl px-4 py-2.5">
+                    <div className="text-xs font-mono font-bold text-emerald-300">
+                      PV Steve : {steveHp}%
+                    </div>
+                    <div className="text-xs font-mono font-bold text-cyan-300">
+                      Bouclier Virus : {Math.round(virusShield)}%
+                    </div>
+                    <div className="text-xs font-mono font-black text-rose-400">
+                      PV Virus : {Math.round(virusHp)}%
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        desktopCombatRef.current.virusShield = 0;
+                        desktopCombatRef.current.virusHp = 0;
+                      }}
+                      className="pointer-events-auto px-3 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-mono font-black text-[10px] uppercase cursor-pointer"
+                    >
+                      Purger Virus &rarr; Vol Élytres 3D
+                    </button>
+                  </div>
+                </div>
+
+                {minions.map((m) => (
+                  <div
+                    key={m.id}
+                    className="absolute z-25 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex flex-col items-center"
+                    style={{ left: `${m.x}%`, top: `${m.y}%` }}
+                  >
+                    <div
+                      className={`w-10 h-10 rounded-lg border-2 flex items-center justify-center shadow-lg ${
+                        m.kind === 'DRONE'
+                          ? 'bg-rose-950/90 border-rose-400 text-rose-300 shadow-[0_0_16px_rgba(244,63,94,0.8)]'
+                          : 'bg-emerald-950/90 border-lime-400 text-lime-300 shadow-[0_0_16px_rgba(132,204,22,0.8)]'
+                      }`}
+                    >
+                      {m.kind === 'DRONE' ? (
+                        <Zap className="w-5 h-5" />
+                      ) : (
+                        <Cpu className="w-5 h-5" />
+                      )}
+                    </div>
+                    <span className="mt-0.5 px-1.5 py-0.2 bg-slate-950/85 text-[9px] font-mono font-bold text-white rounded">
+                      {m.kind === 'DRONE' ? 'DRONE' : 'ZOMBIE.EXE'}
+                    </span>
+                  </div>
+                ))}
+
+                {virusOrbs.map((o) => (
+                  <div
+                    key={o.id}
+                    className={`absolute z-25 w-5 h-5 rounded-full -translate-x-1/2 -translate-y-1/2 pointer-events-none ${
+                      o.reflected
+                        ? 'bg-cyan-300 shadow-[0_0_18px_#22d3ee]'
+                        : 'bg-rose-500 shadow-[0_0_16px_#f43f5e]'
+                    }`}
+                    style={{ left: `${o.x}%`, top: `${o.y}%` }}
+                  />
+                ))}
+
+                <div
+                  className="absolute z-30 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex flex-col items-center"
+                  style={{ left: `${virusPos.x}%`, top: `${virusPos.y}%` }}
+                >
+                  <div
+                    className={`w-24 h-24 rounded-full flex items-center justify-center border-4 transition-all ${
+                      virusShield > 0
+                        ? 'bg-rose-950/90 border-cyan-400 shadow-[0_0_45px_rgba(34,211,238,0.85)]'
+                        : 'bg-rose-600/40 border-rose-500 shadow-[0_0_50px_rgba(244,63,94,0.95)]'
+                    }`}
+                  >
+                    <ShieldAlert className="w-12 h-12 text-rose-200" />
+                  </div>
+                  <div className="mt-1.5 px-2.5 py-0.5 rounded bg-slate-950/90 border border-rose-400 text-[10px] font-mono font-black text-rose-200">
+                    {virusShield > 0
+                      ? `BOUCLIER ACTIF (${Math.round(virusShield)}%)`
+                      : `VIRUS VULNÉRABLE (${Math.round(virusHp)}% PV)`}
+                  </div>
+                </div>
+
+                <div
+                  className="absolute z-35 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex flex-col items-center"
+                  style={{ left: `${stevePos.x}%`, top: `${stevePos.y}%` }}
+                >
+                  {steveSweepTimer > 0 && (
+                    <div
+                      className="absolute w-44 h-44 rounded-full border-4 border-purple-400 bg-purple-500/25 shadow-[0_0_45px_rgba(168,85,247,0.9)]"
+                      style={{
+                        transform: `rotate(${steveSweepAngle}rad)`,
+                      }}
+                    />
+                  )}
+                  <div className="w-14 h-16 rounded-xl bg-zinc-800 border-2 border-purple-400 shadow-[0_0_25px_rgba(168,85,247,0.85)] flex flex-col items-center justify-center">
+                    <div className="w-7 h-1.5 bg-cyan-300 mb-1" />
+                    <Swords className="w-6 h-6 text-purple-300" />
+                  </div>
+                  <span className="mt-1 px-2 py-0.5 rounded bg-slate-950/90 border border-purple-400 text-[10px] font-mono font-black text-purple-200">
+                    STEVE • SWEEP ATTACK
+                  </span>
+                </div>
+              </>
+            )}
           </div>
 
-          <div className="h-12 bg-slate-950 px-4 flex items-center justify-between text-xs">
-            <span>Démarrer • Minecraft 1.21.4 (Saut dans la Brèche 3D)</span>
-            <span className="text-rose-400 font-bold flex items-center gap-1">
-              <Wifi className="w-4 h-4" /> BRÈCHE OUVERTE
-            </span>
+          <div className="h-12 bg-slate-950/95 border-t border-white/15 px-4 flex items-center justify-between text-xs z-40">
+            <div className="flex items-center gap-3">
+              <span className="font-bold text-sky-300">⊞ Démarrer</span>
+              <button
+                type="button"
+                onClick={
+                  stage === 'NEW_DESKTOP_BREACH'
+                    ? triggerAltTabToMinecraft
+                    : undefined
+                }
+                className={`px-3 py-1.5 rounded-lg font-mono font-black text-xs flex items-center gap-2 cursor-pointer ${
+                  stage === 'NEW_DESKTOP_BREACH' && breachTimer >= 2.1
+                    ? 'bg-emerald-400 text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.95)] animate-pulse'
+                    : 'bg-slate-800 text-emerald-300 border border-emerald-500/40'
+                }`}
+              >
+                <span>⛏ Minecraft 1.21.4</span>
+                {stage === 'NEW_DESKTOP_BREACH' && breachTimer >= 2.1 && (
+                  <span className="text-[10px] bg-slate-950 text-amber-300 px-1.5 py-0.5 rounded">
+                    CLIQUEZ OU ALT+TAB
+                  </span>
+                )}
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span
+                className={`font-mono font-bold flex items-center gap-1 ${
+                  breachTimer >= 1.1 ? 'text-rose-400' : 'text-emerald-300'
+                }`}
+              >
+                <Wifi className="w-4 h-4" />
+                {breachTimer >= 2.1
+                  ? 'COIN ÉCRAN BRISÉ'
+                  : breachTimer >= 1.1
+                  ? 'IMPACT RÉSEAU !'
+                  : 'Réseau Connecté'}
+              </span>
+              <Volume2 className="w-4 h-4 text-slate-400" />
+            </div>
           </div>
         </div>
       )}
