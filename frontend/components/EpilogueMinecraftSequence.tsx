@@ -1,28 +1,30 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import * as THREE from 'three';
 import {
-  Globe,
-  Cpu,
-  Wifi,
-  Volume2,
   Rocket,
-  Wrench,
   CheckCircle2,
   Sparkles,
   Home,
   RotateCcw,
   ShieldAlert,
   Swords,
-  Layers,
-  Terminal,
+  Cpu,
+  Wifi,
+  Volume2,
   Zap,
+  Crosshair,
+  Flame,
+  Navigation,
 } from 'lucide-react';
 import { soundFX } from '../utils/sound';
 
 export type EpilogueStartSubPhase =
-  | 'CRAFT_AND_ROCKET'
-  | 'SIX_MONTHS_VIRUS'
-  | 'STEVE_EXIT_COMBAT'
-  | 'ELYTRA_FLIGHT';
+  | 'HANGAR_HUB'
+  | 'MINIGAME_PARKOUR'
+  | 'MINIGAME_HOLOGRAM'
+  | 'MINIGAME_VALVES'
+  | 'ELYTRA_FLIGHT_3D'
+  | 'SIX_MONTHS_VIRUS';
 
 export interface EpilogueMinecraftSequenceProps {
   initialSubPhase?: EpilogueStartSubPhase;
@@ -31,1325 +33,1894 @@ export interface EpilogueMinecraftSequenceProps {
   onRestartFullMiniGame: () => void;
 }
 
-type EpilogueStage =
-  | 'OPEN_WORLD_ARRIVAL'
-  | 'WORKSHOP_CRAFT'
-  | 'ROCKET_LAUNCH'
+type SequenceStage =
+  | 'HANGAR_3D'
+  | 'ROCKET_LAUNCH_3D'
   | 'TYPEWRITER_6_MONTHS'
-  | 'NEW_PC_STRIKE'
-  | 'STEVE_COMBAT'
-  | 'ELYTRA_FLIGHT'
-  | 'OPEN_WORLD_LANDING';
+  | 'WINDOWS_BREACH_TRANSITION'
+  | 'ELYTRA_3D'
+  | 'CONFRONTATION_3D';
 
-interface CraftComponentSpec {
-  id: 'PAYLOAD' | 'ROOT_CODE' | 'ZERO_DAY';
-  name: string;
-  code: string;
-  desc: string;
-  color: string;
+interface ServerRackPlatform3D {
+  group: THREE.Group;
+  mesh: THREE.Mesh;
+  wire: THREE.LineSegments;
+  basePos: THREE.Vector3;
+  width: number;
+  depth: number;
+  steppedTime: number;
+  collapsed: boolean;
+  respawnTimer: number;
 }
 
-const CRAFT_COMPONENTS: CraftComponentSpec[] = [
-  {
-    id: 'PAYLOAD',
-    name: 'Payload Corrompu',
-    code: '0xDEAD_PAYLOAD',
-    desc: 'Surcharge polymorphe extraite des ruines de System32.',
-    color: '#f43f5e',
-  },
-  {
-    id: 'ROOT_CODE',
-    name: 'Code Racine',
-    code: 'RING0_KERNEL_KEY',
-    desc: 'Clé d’accès suprême au matériel et aux cartes réseau.',
-    color: '#fde047',
-  },
-  {
-    id: 'ZERO_DAY',
-    name: 'Exploit Zéro-Day',
-    code: 'CVE_9999_OMEGA',
-    desc: 'Brèche orbitale capable de traverser n’importe quel routeur.',
-    color: '#38bdf8',
-  },
-];
-
-interface VirusEnergyOrb {
-  id: number;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
+interface ValveStation3D {
+  group: THREE.Group;
+  wheel: THREE.Group;
+  light: THREE.PointLight;
+  pos: THREE.Vector3;
+  progress: number;
+  completed: boolean;
 }
 
-interface ExplosionParticle {
-  id: number;
+interface CanyonObstacle3D {
+  type: 'FIREWALL' | 'FIBER_CABLE' | 'VOXEL_CLUSTER';
+  group: THREE.Group;
+  z: number;
   x: number;
   y: number;
-  vx: number;
-  vy: number;
-  color: string;
-  size: number;
-  life: number;
+  radiusX: number;
+  radiusY: number;
+  hit: boolean;
+  phase: number;
+}
+
+interface BoostRing3D {
+  mesh: THREE.Mesh;
+  z: number;
+  x: number;
+  y: number;
+  collected: boolean;
 }
 
 const TYPEWRITER_FULL_TEXT = '6 MOIS PLUS TARD... NOUVEL ORDINATEUR.';
 
+function createMinecraftSteve3DGroup(withElytra: boolean): {
+  root: THREE.Group;
+  leftWing: THREE.Mesh;
+  rightWing: THREE.Mesh;
+  leftLeg: THREE.Mesh;
+  rightLeg: THREE.Mesh;
+  leftArm: THREE.Mesh;
+  rightArm: THREE.Mesh;
+} {
+  const root = new THREE.Group();
+
+  const netheriteMat = new THREE.MeshStandardMaterial({
+    color: 0x27272a,
+    roughness: 0.35,
+    metalness: 0.85,
+  });
+  const trimMat = new THREE.MeshStandardMaterial({
+    color: 0xa855f7,
+    emissive: 0x7e22ce,
+    emissiveIntensity: 0.45,
+    roughness: 0.3,
+    metalness: 0.7,
+  });
+  const headMat = new THREE.MeshStandardMaterial({
+    color: 0x3f3f46,
+    roughness: 0.4,
+    metalness: 0.8,
+  });
+  const visorMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.25, 0.5), netheriteMat);
+  torso.position.y = 1.45;
+  root.add(torso);
+
+  const chestTrim = new THREE.Mesh(
+    new THREE.BoxGeometry(0.94, 0.35, 0.54),
+    trimMat
+  );
+  chestTrim.position.y = 1.65;
+  root.add(chestTrim);
+
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), headMat);
+  head.position.y = 2.5;
+  root.add(head);
+
+  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.16, 0.84), visorMat);
+  visor.position.y = 2.52;
+  root.add(visor);
+
+  const leftLeg = new THREE.Mesh(
+    new THREE.BoxGeometry(0.4, 0.9, 0.42),
+    netheriteMat
+  );
+  leftLeg.position.set(-0.22, 0.45, 0);
+  root.add(leftLeg);
+
+  const rightLeg = new THREE.Mesh(
+    new THREE.BoxGeometry(0.4, 0.9, 0.42),
+    netheriteMat
+  );
+  rightLeg.position.set(0.22, 0.45, 0);
+  root.add(rightLeg);
+
+  const leftArm = new THREE.Mesh(
+    new THREE.BoxGeometry(0.36, 1.1, 0.4),
+    netheriteMat
+  );
+  leftArm.position.set(-0.66, 1.45, 0);
+  root.add(leftArm);
+
+  const rightArm = new THREE.Mesh(
+    new THREE.BoxGeometry(0.36, 1.1, 0.4),
+    netheriteMat
+  );
+  rightArm.position.set(0.66, 1.45, 0);
+  root.add(rightArm);
+
+  const swordBlade = new THREE.Mesh(
+    new THREE.BoxGeometry(0.14, 1.35, 0.24),
+    trimMat
+  );
+  swordBlade.position.set(0, -0.75, 0.35);
+  swordBlade.rotation.x = Math.PI / 3;
+  rightArm.add(swordBlade);
+
+  const wingGeo = new THREE.BoxGeometry(1.15, 1.85, 0.08);
+  const wingMat = new THREE.MeshStandardMaterial({
+    color: 0x475569,
+    emissive: 0x0284c7,
+    emissiveIntensity: 0.35,
+    roughness: 0.4,
+    metalness: 0.75,
+  });
+
+  const leftWing = new THREE.Mesh(wingGeo, wingMat);
+  leftWing.position.set(-0.55, 1.45, -0.32);
+  leftWing.rotation.z = 0.28;
+  leftWing.visible = withElytra;
+  root.add(leftWing);
+
+  const rightWing = new THREE.Mesh(wingGeo, wingMat);
+  rightWing.position.set(0.55, 1.45, -0.32);
+  rightWing.rotation.z = -0.28;
+  rightWing.visible = withElytra;
+  root.add(rightWing);
+
+  return {
+    root,
+    leftWing,
+    rightWing,
+    leftLeg,
+    rightLeg,
+    leftArm,
+    rightArm,
+  };
+}
+
+function createAvatar3DGroup(isCelestial: boolean): {
+  root: THREE.Group;
+  leftLeg: THREE.Mesh;
+  rightLeg: THREE.Mesh;
+  halo: THREE.Mesh;
+} {
+  const root = new THREE.Group();
+
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: isCelestial ? 0xf8fafc : 0x090414,
+    emissive: isCelestial ? 0xfef08a : 0xe11d48,
+    emissiveIntensity: 0.45,
+    roughness: 0.25,
+    metalness: 0.75,
+  });
+
+  const accentMat = new THREE.MeshStandardMaterial({
+    color: isCelestial ? 0x38bdf8 : 0xa855f7,
+    emissive: isCelestial ? 0x38bdf8 : 0x9333ea,
+    emissiveIntensity: 0.75,
+    roughness: 0.2,
+    metalness: 0.8,
+  });
+
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.82, 1.2, 0.46), bodyMat);
+  torso.position.y = 1.45;
+  root.add(torso);
+
+  const core = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.24, 0),
+    accentMat
+  );
+  core.position.set(0, 1.5, 0.26);
+  root.add(core);
+
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.68, 0.68), bodyMat);
+  head.position.y = 2.45;
+  root.add(head);
+
+  const halo = new THREE.Mesh(
+    new THREE.TorusGeometry(0.58, 0.05, 12, 32),
+    accentMat
+  );
+  halo.position.set(0, 2.65, -0.22);
+  root.add(halo);
+
+  const leftLeg = new THREE.Mesh(
+    new THREE.BoxGeometry(0.34, 0.88, 0.36),
+    bodyMat
+  );
+  leftLeg.position.set(-0.2, 0.44, 0);
+  root.add(leftLeg);
+
+  const rightLeg = new THREE.Mesh(
+    new THREE.BoxGeometry(0.34, 0.88, 0.36),
+    bodyMat
+  );
+  rightLeg.position.set(0.2, 0.44, 0);
+  root.add(rightLeg);
+
+  const leftArm = new THREE.Mesh(
+    new THREE.BoxGeometry(0.3, 1.0, 0.32),
+    bodyMat
+  );
+  leftArm.position.set(-0.6, 1.45, 0);
+  root.add(leftArm);
+
+  const rightArm = new THREE.Mesh(
+    new THREE.BoxGeometry(0.3, 1.0, 0.32),
+    bodyMat
+  );
+  rightArm.position.set(0.6, 1.45, 0);
+  root.add(rightArm);
+
+  return { root, leftLeg, rightLeg, halo };
+}
+
 export const EpilogueMinecraftSequence: React.FC<EpilogueMinecraftSequenceProps> = ({
-  initialSubPhase = 'CRAFT_AND_ROCKET',
+  initialSubPhase = 'HANGAR_HUB',
   triggerKey = 0,
   onReturnToMainMenu,
   onRestartFullMiniGame,
 }) => {
-  const mapSubPhaseToStage = (sub: EpilogueStartSubPhase): EpilogueStage => {
+  const mount3DRef = useRef<HTMLDivElement | null>(null);
+
+  const resolveInitialStage = (sub: EpilogueStartSubPhase): SequenceStage => {
+    if (sub === 'ELYTRA_FLIGHT_3D') return 'ELYTRA_3D';
     if (sub === 'SIX_MONTHS_VIRUS') return 'TYPEWRITER_6_MONTHS';
-    if (sub === 'STEVE_EXIT_COMBAT') return 'STEVE_COMBAT';
-    if (sub === 'ELYTRA_FLIGHT') return 'ELYTRA_FLIGHT';
-    return 'OPEN_WORLD_ARRIVAL';
+    return 'HANGAR_3D';
   };
 
-  const [stage, setStage] = useState<EpilogueStage>(() =>
-    mapSubPhaseToStage(initialSubPhase)
+  const [stage, setStage] = useState<SequenceStage>(() =>
+    resolveInitialStage(initialSubPhase)
   );
-  const [stageTime, setStageTime] = useState<number>(0);
-  const [selectedComponents, setSelectedComponents] = useState<string[]>([]);
-  const [virusCrafted, setVirusCrafted] = useState<boolean>(false);
-  const [rocketLoaded, setRocketLoaded] = useState<boolean>(false);
-  const [rocketLaunched, setRocketLaunched] = useState<boolean>(false);
-  const [rocketLaunchTime, setRocketLaunchTime] = useState<number>(0);
+  const [payloadDone, setPayloadDone] = useState<boolean>(false);
+  const [rootCodeDone, setRootCodeDone] = useState<boolean>(false);
+  const [zeroDayDone, setZeroDayDone] = useState<boolean>(false);
+
+  const [hologramModalActive, setHologramModalActive] = useState<boolean>(
+    initialSubPhase === 'MINIGAME_HOLOGRAM'
+  );
+  const [lockedRingsCount, setLockedRingsCount] = useState<number>(0);
+
+  const [reactorTimer, setReactorTimer] = useState<number>(40);
+  const [reactorPressure, setReactorPressure] = useState<number>(100);
+  const [valvesClosedCount, setValvesClosedCount] = useState<number>(0);
+
+  const [promptText, setPromptText] = useState<string | null>(null);
+  const [toastBanner, setToastBanner] = useState<string | null>(null);
 
   const [typewriterText, setTypewriterText] = useState<string>('');
+  const [breachTimer, setBreachTimer] = useState<number>(0);
 
-  const [stevePos, setStevePos] = useState<{ x: number; y: number }>({
-    x: 28,
-    y: 56,
-  });
-  const [steveFacing, setSteveFacing] = useState<1 | -1>(1);
-  const [steveHp, setSteveHp] = useState<number>(20);
-  const [steveSwingTimer, setSteveSwingTimer] = useState<number>(0);
-  const [steveEntryProgress, setSteveEntryProgress] = useState<number>(0);
-
-  const [virusHp, setVirusHp] = useState<number>(240);
-  const [virusMaxHp] = useState<number>(240);
-  const [virusOrbs, setVirusOrbs] = useState<VirusEnergyOrb[]>([]);
-  const [particles, setParticles] = useState<ExplosionParticle[]>([]);
-
-  const [elytraYaw, setElytraYaw] = useState<number>(0);
-  const [elytraPitch, setElytraPitch] = useState<number>(0);
   const [elytraProgress, setElytraProgress] = useState<number>(0);
+  const [elytraHits, setElytraHits] = useState<number>(0);
+  const [elytraBlur, setElytraBlur] = useState<number>(0);
+  const [elytraBoostActive, setElytraBoostActive] = useState<boolean>(false);
 
-  const combatRef = useRef({
+  const sim3DRef = useRef({
+    stage: resolveInitialStage(initialSubPhase) as SequenceStage,
     keys: {} as Record<string, boolean>,
-    steveX: 28,
-    steveY: 56,
-    steveFacing: 1 as 1 | -1,
-    steveHp: 20,
-    steveSwingTimer: 0,
-    steveEntryProgress: 0,
-    virusHp: 240,
-    virusDeadTimer: 0,
-    orbSpawnTimer: 0,
-    orbs: [] as VirusEnergyOrb[],
-    particles: [] as ExplosionParticle[],
-    nextId: 1,
+    playerPos: new THREE.Vector3(0, 0, 14),
+    playerVel: new THREE.Vector3(0, 0, 0),
+    isGrounded: true,
+    camYaw: 0,
+    camPitch: 0.28,
+    payloadCollected: false,
+    rootCodeCollected: false,
+    zeroDayCollected: false,
+    hologramActive: initialSubPhase === 'MINIGAME_HOLOGRAM',
+    ringAngles: [0, 1.8, 3.6],
+    ringLocked: [false, false, false],
+    reactorPressure: 100,
+    reactorTimer: 40,
+    rocketLaunchElapsed: 0,
+    elytraPos: new THREE.Vector3(0, 12, 0),
     elytraYaw: 0,
     elytraPitch: 0,
-    elytraProgress: 0,
+    elytraRoll: 0,
+    elytraSpeed: 46,
+    elytraBoostTimer: 0,
+    elytraBlurTimer: 0,
+    elytraHits: 0,
+    elytraDistance: 0,
+    elytraMaxDistance: 460,
+    teleportTarget: null as 'HUB' | 'PARKOUR' | 'HOLOGRAM' | 'VALVES' | 'WORKBENCH' | null,
+    interactRequested: false,
   });
 
-  const resetSequence = useCallback((sub: EpilogueStartSubPhase) => {
-    const startStage = mapSubPhaseToStage(sub);
-    soundFX.init();
-    setStage(startStage);
-    setStageTime(0);
-    setSelectedComponents([]);
-    setVirusCrafted(false);
-    setRocketLoaded(false);
-    setRocketLaunched(false);
-    setRocketLaunchTime(0);
-    setTypewriterText('');
-
-    combatRef.current = {
-      keys: {},
-      steveX: 28,
-      steveY: 56,
-      steveFacing: 1,
-      steveHp: 20,
-      steveSwingTimer: 0,
-      steveEntryProgress: 0,
-      virusHp: 240,
-      virusDeadTimer: 0,
-      orbSpawnTimer: 0,
-      orbs: [],
-      particles: [],
-      nextId: 1,
-      elytraYaw: 0,
-      elytraPitch: 0,
-      elytraProgress: 0,
-    };
-
-    setStevePos({ x: 28, y: 56 });
-    setSteveFacing(1);
-    setSteveHp(20);
-    setSteveSwingTimer(0);
-    setSteveEntryProgress(0);
-    setVirusHp(240);
-    setVirusOrbs([]);
-    setParticles([]);
-    setElytraYaw(0);
-    setElytraPitch(0);
-    setElytraProgress(0);
+  const showQuickToast = useCallback((msg: string) => {
+    setToastBanner(msg);
+    setTimeout(() => {
+      setToastBanner((prev) => (prev === msg ? null : prev));
+    }, 3200);
   }, []);
 
   useEffect(() => {
-    resetSequence(initialSubPhase);
-  }, [initialSubPhase, triggerKey, resetSequence]);
+    const startSt = resolveInitialStage(initialSubPhase);
+    const s = sim3DRef.current;
+    s.stage = startSt;
+    s.payloadCollected = false;
+    s.rootCodeCollected = false;
+    s.zeroDayCollected = false;
+    s.ringAngles = [0, 1.8, 3.6];
+    s.ringLocked = [false, false, false];
+    s.reactorPressure = 100;
+    s.reactorTimer = 40;
+    s.rocketLaunchElapsed = 0;
+    s.elytraPos.set(0, 12, 0);
+    s.elytraYaw = 0;
+    s.elytraPitch = 0;
+    s.elytraRoll = 0;
+    s.elytraBoostTimer = 0;
+    s.elytraBlurTimer = 0;
+    s.elytraHits = 0;
+    s.elytraDistance = 0;
+    s.hologramActive = initialSubPhase === 'MINIGAME_HOLOGRAM';
+
+    if (initialSubPhase === 'MINIGAME_PARKOUR') {
+      s.playerPos.set(-18, 0, 8);
+      s.camYaw = 0;
+    } else if (initialSubPhase === 'MINIGAME_HOLOGRAM') {
+      s.playerPos.set(18, 0, 0);
+      s.camYaw = -Math.PI / 2;
+    } else if (initialSubPhase === 'MINIGAME_VALVES') {
+      s.playerPos.set(0, 0, -14);
+      s.camYaw = 0;
+    } else {
+      s.playerPos.set(0, 0, 14);
+      s.camYaw = 0;
+    }
+    s.playerVel.set(0, 0, 0);
+
+    setStage(startSt);
+    setPayloadDone(false);
+    setRootCodeDone(false);
+    setZeroDayDone(false);
+    setHologramModalActive(initialSubPhase === 'MINIGAME_HOLOGRAM');
+    setLockedRingsCount(0);
+    setReactorTimer(40);
+    setReactorPressure(100);
+    setValvesClosedCount(0);
+    setTypewriterText('');
+    setBreachTimer(0);
+    setElytraProgress(0);
+    setElytraHits(0);
+    setElytraBlur(0);
+  }, [initialSubPhase, triggerKey]);
 
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      combatRef.current.keys[e.code] = true;
+    if (stage !== 'TYPEWRITER_6_MONTHS' && stage !== 'WINDOWS_BREACH_TRANSITION') {
+      return;
+    }
 
-      if (
-        stage === 'NEW_PC_STRIKE' &&
-        stageTime >= 2.2 &&
-        (e.code === 'Tab' || e.altKey || e.code === 'AltLeft' || e.code === 'KeyM')
-      ) {
-        e.preventDefault();
-        soundFX.init();
-        soundFX.playOrbCollect(8);
-        setStage('STEVE_COMBAT');
-        setStageTime(0);
-      }
-    };
-
-    const onKeyUp = (e: KeyboardEvent) => {
-      combatRef.current.keys[e.code] = false;
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
-    };
-  }, [stage, stageTime]);
-
-  useEffect(() => {
     let rafId: number;
     let lastTime = performance.now();
-    let localStageTime = 0;
-    let lastCharCount = 0;
-    let meteorSoundPlayed = false;
-    let glassShatterPlayed = false;
+    let elapsed = 0;
+    let lastChars = 0;
+    let crashPlayed = false;
 
     const tick = (now: number) => {
       rafId = requestAnimationFrame(tick);
       const dt = Math.min(0.05, (now - lastTime) / 1000);
       lastTime = now;
-
-      localStageTime += dt;
-      setStageTime(localStageTime);
-
-      if (stage === 'OPEN_WORLD_ARRIVAL') {
-        if (localStageTime >= 3.2) {
-          localStageTime = 0;
-          setStage('WORKSHOP_CRAFT');
-          setStageTime(0);
-        }
-        return;
-      }
-
-      if (stage === 'ROCKET_LAUNCH' && rocketLaunched) {
-        setRocketLaunchTime((prev) => {
-          const next = prev + dt;
-          if (next >= 3.8) {
-            localStageTime = 0;
-            setStage('TYPEWRITER_6_MONTHS');
-            setStageTime(0);
-          }
-          return next;
-        });
-        return;
-      }
+      elapsed += dt;
 
       if (stage === 'TYPEWRITER_6_MONTHS') {
         const chars = Math.min(
           TYPEWRITER_FULL_TEXT.length,
-          Math.floor(localStageTime * 12)
+          Math.floor(elapsed * 13)
         );
-        if (chars > lastCharCount) {
-          lastCharCount = chars;
+        if (chars > lastChars) {
+          lastChars = chars;
           soundFX.init();
           soundFX.playPickupAmmo();
           setTypewriterText(TYPEWRITER_FULL_TEXT.slice(0, chars));
         }
-        if (localStageTime >= 4.2) {
-          localStageTime = 0;
-          setStage('NEW_PC_STRIKE');
-          setStageTime(0);
+        if (elapsed >= 3.8) {
+          elapsed = 0;
+          setStage('WINDOWS_BREACH_TRANSITION');
         }
-        return;
-      }
-
-      if (stage === 'NEW_PC_STRIKE') {
-        if (localStageTime >= 0.65 && !meteorSoundPlayed) {
-          meteorSoundPlayed = true;
-          soundFX.init();
-          soundFX.playLightningDash();
-        }
-        if (localStageTime >= 1.45 && !glassShatterPlayed) {
-          glassShatterPlayed = true;
+      } else if (stage === 'WINDOWS_BREACH_TRANSITION') {
+        setBreachTimer(elapsed);
+        if (elapsed >= 1.1 && !crashPlayed) {
+          crashPlayed = true;
           soundFX.init();
           soundFX.playPiercingGlitchCrash();
           soundFX.playBossSlam();
         }
-        return;
-      }
-
-      if (stage === 'STEVE_COMBAT') {
-        const st = combatRef.current;
-
-        if (st.steveEntryProgress < 1) {
-          st.steveEntryProgress = Math.min(1, st.steveEntryProgress + dt * 1.15);
-          setSteveEntryProgress(st.steveEntryProgress);
-        }
-
-        const moveSpeed = 34;
-        let dx = 0;
-        let dy = 0;
-        if (st.keys['KeyW'] || st.keys['KeyZ'] || st.keys['ArrowUp']) dy -= 1;
-        if (st.keys['KeyS'] || st.keys['ArrowDown']) dy += 1;
-        if (st.keys['KeyA'] || st.keys['KeyQ'] || st.keys['ArrowLeft']) dx -= 1;
-        if (st.keys['KeyD'] || st.keys['ArrowRight']) dx += 1;
-
-        if (dx !== 0 || dy !== 0) {
-          const len = Math.hypot(dx, dy);
-          st.steveX = Math.max(8, Math.min(86, st.steveX + (dx / len) * moveSpeed * dt));
-          st.steveY = Math.max(16, Math.min(84, st.steveY + (dy / len) * moveSpeed * dt));
-          if (dx !== 0) {
-            st.steveFacing = dx >= 0 ? 1 : -1;
-          }
-        }
-
-        if (st.steveSwingTimer > 0) {
-          st.steveSwingTimer = Math.max(0, st.steveSwingTimer - dt);
-        }
-
-        for (let i = st.particles.length - 1; i >= 0; i--) {
-          const p = st.particles[i];
-          p.x += p.vx * dt;
-          p.y += p.vy * dt;
-          p.life -= dt;
-          if (p.life <= 0) {
-            st.particles.splice(i, 1);
-          }
-        }
-
-        if (st.virusHp > 0) {
-          st.orbSpawnTimer += dt;
-          if (st.orbSpawnTimer >= 1.15 && st.steveEntryProgress >= 1) {
-            st.orbSpawnTimer = 0;
-            const virusX = 82;
-            const virusY = 74;
-            const toSteveX = st.steveX - virusX;
-            const toSteveY = st.steveY - virusY;
-            const dist = Math.max(1, Math.hypot(toSteveX, toSteveY));
-            const orbSpeed = 19;
-            st.orbs.push({
-              id: st.nextId++,
-              x: virusX,
-              y: virusY,
-              vx: (toSteveX / dist) * orbSpeed,
-              vy: (toSteveY / dist) * orbSpeed,
-            });
-            soundFX.playLightningDash();
-          }
-
-          for (let i = st.orbs.length - 1; i >= 0; i--) {
-            const orb = st.orbs[i];
-            orb.x += orb.vx * dt;
-            orb.y += orb.vy * dt;
-
-            const distToSteve = Math.hypot(orb.x - st.steveX, orb.y - st.steveY);
-            if (distToSteve < 5.5) {
-              st.orbs.splice(i, 1);
-              st.steveHp = Math.max(4, st.steveHp - 2);
-              soundFX.playPlayerHurt();
-              continue;
-            }
-
-            if (orb.x < 0 || orb.x > 100 || orb.y < 0 || orb.y > 100) {
-              st.orbs.splice(i, 1);
-            }
-          }
-        } else {
-          st.orbs = [];
-          st.virusDeadTimer += dt;
-          if (st.virusDeadTimer >= 2.1) {
-            localStageTime = 0;
-            soundFX.playLightningDash();
-            setStage('ELYTRA_FLIGHT');
-            setStageTime(0);
-            return;
-          }
-        }
-
-        setStevePos({ x: st.steveX, y: st.steveY });
-        setSteveFacing(st.steveFacing);
-        setSteveHp(st.steveHp);
-        setSteveSwingTimer(st.steveSwingTimer);
-        setVirusHp(st.virusHp);
-        setVirusOrbs([...st.orbs]);
-        setParticles([...st.particles]);
-        return;
-      }
-
-      if (stage === 'ELYTRA_FLIGHT') {
-        const st = combatRef.current;
-        st.elytraProgress = Math.min(100, st.elytraProgress + dt * 16.5);
-        setElytraProgress(st.elytraProgress);
-        if (st.elytraProgress >= 100) {
-          localStageTime = 0;
-          soundFX.playBossSlam();
-          soundFX.playCinematicChord(3, true);
-          setStage('OPEN_WORLD_LANDING');
-          setStageTime(0);
+        if (elapsed >= 3.2) {
+          soundFX.init();
+          soundFX.playLightningDash();
+          sim3DRef.current.stage = 'ELYTRA_3D';
+          sim3DRef.current.elytraPos.set(0, 12, 0);
+          sim3DRef.current.elytraDistance = 0;
+          sim3DRef.current.elytraHits = 0;
+          setStage('ELYTRA_3D');
         }
       }
     };
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [stage, rocketLaunched]);
+  }, [stage]);
 
-  const handleToggleComponent = (compId: string) => {
-    if (virusCrafted) return;
-    soundFX.init();
-    soundFX.playOrbCollect(4);
-    setSelectedComponents((prev) =>
-      prev.includes(compId) ? prev : [...prev, compId]
+  useEffect(() => {
+    const container = mount3DRef.current;
+    if (!container) return;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x04020c);
+    scene.fog = new THREE.FogExp2(0x050212, 0.0085);
+
+    const camera = new THREE.PerspectiveCamera(
+      68,
+      window.innerWidth / Math.max(1, window.innerHeight),
+      0.1,
+      450
     );
-  };
 
-  const handleCraftPrimordialVirus = () => {
-    if (selectedComponents.length < 3) return;
-    soundFX.init();
-    soundFX.playVoidDimensionSeal();
-    setVirusCrafted(true);
-    setTimeout(() => {
-      setStage('ROCKET_LAUNCH');
-      setStageTime(0);
-    }, 1100);
-  };
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    container.innerHTML = '';
+    container.appendChild(renderer.domElement);
 
-  const handleLoadAndLaunchRocket = () => {
-    soundFX.init();
-    if (!rocketLoaded) {
-      soundFX.playOrbCollect(7);
-      setRocketLoaded(true);
-      setTimeout(() => {
-        soundFX.playNovaBlast();
-        soundFX.playBossRoar();
-        setRocketLaunched(true);
-      }, 650);
-    } else if (!rocketLaunched) {
-      soundFX.playNovaBlast();
-      setRocketLaunched(true);
+    const ambientLight = new THREE.AmbientLight(0x1e1b4b, 1.6);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0x38bdf8, 1.8);
+    dirLight.position.set(25, 45, 20);
+    scene.add(dirLight);
+
+    const purpleVolLight = new THREE.PointLight(0xa855f7, 6.5, 48);
+    purpleVolLight.position.set(-16, 12, 0);
+    scene.add(purpleVolLight);
+
+    const cyanVolLight = new THREE.PointLight(0x38bdf8, 6.5, 48);
+    cyanVolLight.position.set(16, 12, 0);
+    scene.add(cyanVolLight);
+
+    const reactorLight = new THREE.PointLight(0xf43f5e, 7.0, 38);
+    reactorLight.position.set(0, 8, -22);
+    scene.add(reactorLight);
+
+    const terrainGeo = new THREE.PlaneGeometry(360, 360, 72, 72);
+    terrainGeo.rotateX(-Math.PI / 2);
+    const posAttr = terrainGeo.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < posAttr.count; i++) {
+      const vx = posAttr.getX(i);
+      const vz = posAttr.getZ(i);
+      const distCenter = Math.hypot(vx, vz);
+      if (distCenter > 36) {
+        const wave =
+          Math.sin(vx * 0.08) * Math.cos(vz * 0.08) * 3.8 +
+          Math.sin(vx * 0.22 + vz * 0.19) * 1.2;
+        posAttr.setY(i, Math.max(0, wave));
+      } else {
+        posAttr.setY(i, 0);
+      }
     }
-  };
+    terrainGeo.computeVertexNormals();
 
-  const handleSteveSwordAttack = () => {
-    if (stage !== 'STEVE_COMBAT') return;
-    const st = combatRef.current;
-    if (st.virusHp <= 0) return;
+    const terrainMesh = new THREE.Mesh(
+      terrainGeo,
+      new THREE.MeshStandardMaterial({
+        color: 0x070514,
+        roughness: 0.28,
+        metalness: 0.82,
+        flatShading: true,
+      })
+    );
+    scene.add(terrainMesh);
 
-    soundFX.init();
-    soundFX.playSwordSwing();
-    st.steveSwingTimer = 0.28;
-    st.steveFacing = 1;
+    const neonGrid = new THREE.GridHelper(360, 90, 0x38bdf8, 0x7e22ce);
+    neonGrid.position.y = 0.04;
+    scene.add(neonGrid);
 
-    for (let i = st.orbs.length - 1; i >= 0; i--) {
-      const dOrb = Math.hypot(
-        st.orbs[i].x - st.steveX,
-        st.orbs[i].y - st.steveY
+    const dataCount = 1400;
+    const dataPositions = new Float32Array(dataCount * 3);
+    const dataColors = new Float32Array(dataCount * 3);
+    for (let i = 0; i < dataCount; i++) {
+      dataPositions[i * 3] = (Math.random() - 0.5) * 240;
+      dataPositions[i * 3 + 1] = 1 + Math.random() * 55;
+      dataPositions[i * 3 + 2] = (Math.random() - 0.5) * 240;
+      const isCyan = i % 2 === 0;
+      dataColors[i * 3] = isCyan ? 0.22 : 0.85;
+      dataColors[i * 3 + 1] = isCyan ? 0.74 : 0.27;
+      dataColors[i * 3 + 2] = isCyan ? 0.97 : 0.93;
+    }
+    const dataGeo = new THREE.BufferGeometry();
+    dataGeo.setAttribute(
+      'position',
+      new THREE.BufferAttribute(dataPositions, 3)
+    );
+    dataGeo.setAttribute('color', new THREE.BufferAttribute(dataColors, 3));
+    const dataParticles = new THREE.Points(
+      dataGeo,
+      new THREE.PointsMaterial({
+        size: 0.35,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.85,
+        blending: THREE.AdditiveBlending,
+      })
+    );
+    scene.add(dataParticles);
+
+    const hangarGroup = new THREE.Group();
+    scene.add(hangarGroup);
+
+    const wallMat = new THREE.MeshStandardMaterial({
+      color: 0x0f172a,
+      roughness: 0.4,
+      metalness: 0.75,
+    });
+    const neonCyanMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+    const neonPurpleMat = new THREE.MeshBasicMaterial({ color: 0xa855f7 });
+
+    const floorPad = new THREE.Mesh(
+      new THREE.BoxGeometry(52, 0.2, 56),
+      new THREE.MeshStandardMaterial({
+        color: 0x090d1a,
+        roughness: 0.22,
+        metalness: 0.88,
+      })
+    );
+    floorPad.position.set(0, -0.05, -2);
+    hangarGroup.add(floorPad);
+
+    for (let p = -2; p <= 2; p++) {
+      const leftPillar = new THREE.Mesh(
+        new THREE.BoxGeometry(1.6, 18, 1.6),
+        wallMat
       );
-      if (dOrb < 18) {
-        st.orbs.splice(i, 1);
+      leftPillar.position.set(-25, 9, p * 11);
+      hangarGroup.add(leftPillar);
+
+      const rightPillar = new THREE.Mesh(
+        new THREE.BoxGeometry(1.6, 18, 1.6),
+        wallMat
+      );
+      rightPillar.position.set(25, 9, p * 11);
+      hangarGroup.add(rightPillar);
+
+      const roofBeam = new THREE.Mesh(
+        new THREE.BoxGeometry(52, 1.1, 1.4),
+        wallMat
+      );
+      roofBeam.position.set(0, 18, p * 11);
+      hangarGroup.add(roofBeam);
+
+      const neonStrip = new THREE.Mesh(
+        new THREE.BoxGeometry(48, 0.18, 0.35),
+        p % 2 === 0 ? neonCyanMat : neonPurpleMat
+      );
+      neonStrip.position.set(0, 17.35, p * 11);
+      hangarGroup.add(neonStrip);
+    }
+
+    const coneGeo = new THREE.ConeGeometry(7, 17, 24, 1, true);
+    const purpleConeMat = new THREE.MeshBasicMaterial({
+      color: 0xa855f7,
+      transparent: true,
+      opacity: 0.11,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const cyanConeMat = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+      transparent: true,
+      opacity: 0.11,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    const volConeLeft = new THREE.Mesh(coneGeo, purpleConeMat);
+    volConeLeft.position.set(-16, 8.5, 0);
+    hangarGroup.add(volConeLeft);
+
+    const volConeRight = new THREE.Mesh(coneGeo, cyanConeMat);
+    volConeRight.position.set(16, 8.5, 0);
+    hangarGroup.add(volConeRight);
+
+    const parkourPlatforms: ServerRackPlatform3D[] = [];
+    const rackCoords = [
+      new THREE.Vector3(-18, 1.3, 6),
+      new THREE.Vector3(-18, 2.7, 1.5),
+      new THREE.Vector3(-18, 4.1, -3.0),
+      new THREE.Vector3(-14.5, 5.5, -5.5),
+      new THREE.Vector3(-11.0, 6.9, -3.0),
+      new THREE.Vector3(-11.0, 8.3, 1.5),
+    ];
+
+    rackCoords.forEach((coord) => {
+      const grp = new THREE.Group();
+      grp.position.copy(coord);
+      const w = 3.2;
+      const d = 3.2;
+      const boxGeo = new THREE.BoxGeometry(w, 0.55, d);
+      const boxMat = new THREE.MeshStandardMaterial({
+        color: 0x1e293b,
+        emissive: 0x0284c7,
+        emissiveIntensity: 0.45,
+        roughness: 0.3,
+        metalness: 0.8,
+      });
+      const mesh = new THREE.Mesh(boxGeo, boxMat);
+      grp.add(mesh);
+
+      const wire = new THREE.LineSegments(
+        new THREE.EdgesGeometry(boxGeo),
+        new THREE.LineBasicMaterial({ color: 0x38bdf8 })
+      );
+      grp.add(wire);
+      hangarGroup.add(grp);
+
+      parkourPlatforms.push({
+        group: grp,
+        mesh,
+        wire,
+        basePos: coord.clone(),
+        width: w,
+        depth: d,
+        steppedTime: 0,
+        collapsed: false,
+        respawnTimer: 0,
+      });
+    });
+
+    const payloadSphereMesh = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.75, 1),
+      new THREE.MeshStandardMaterial({
+        color: 0xf43f5e,
+        emissive: 0xf43f5e,
+        emissiveIntensity: 1.1,
+        wireframe: false,
+      })
+    );
+    payloadSphereMesh.position.set(-11.0, 10.1, 1.5);
+    hangarGroup.add(payloadSphereMesh);
+
+    const holoStationGroup = new THREE.Group();
+    holoStationGroup.position.set(16, 0, 0);
+    hangarGroup.add(holoStationGroup);
+
+    const holoPedestal = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.6, 2.1, 1.6, 16),
+      wallMat
+    );
+    holoPedestal.position.y = 0.8;
+    holoStationGroup.add(holoPedestal);
+
+    const holoRings3D: THREE.Group[] = [];
+    const ringRadii = [1.4, 2.2, 3.0];
+    ringRadii.forEach((rad) => {
+      const rGrp = new THREE.Group();
+      rGrp.position.set(0, 4.6, 0);
+
+      const torus = new THREE.Mesh(
+        new THREE.TorusGeometry(rad, 0.09, 12, 48),
+        new THREE.MeshStandardMaterial({
+          color: 0x38bdf8,
+          emissive: 0x0284c7,
+          emissiveIntensity: 0.8,
+        })
+      );
+      rGrp.add(torus);
+
+      const gapMarker = new THREE.Mesh(
+        new THREE.BoxGeometry(0.42, 0.42, 0.42),
+        new THREE.MeshBasicMaterial({ color: 0xfde047 })
+      );
+      gapMarker.position.set(0, rad, 0);
+      rGrp.add(gapMarker);
+
+      holoStationGroup.add(rGrp);
+      holoRings3D.push(rGrp);
+    });
+
+    const targetMarker3D = new THREE.Mesh(
+      new THREE.ConeGeometry(0.35, 0.7, 8),
+      new THREE.MeshBasicMaterial({ color: 0x10b981 })
+    );
+    targetMarker3D.position.set(0, 8.3, 0);
+    targetMarker3D.rotation.x = Math.PI;
+    holoStationGroup.add(targetMarker3D);
+
+    const reactorGroup = new THREE.Group();
+    reactorGroup.position.set(0, 0, -21);
+    hangarGroup.add(reactorGroup);
+
+    const reactorCoreMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(2.2, 2.2, 7.5, 24),
+      new THREE.MeshStandardMaterial({
+        color: 0xf43f5e,
+        emissive: 0xe11d48,
+        emissiveIntensity: 0.95,
+        transparent: true,
+        opacity: 0.88,
+      })
+    );
+    reactorCoreMesh.position.y = 3.8;
+    reactorGroup.add(reactorCoreMesh);
+
+    const zeroDaySphereMesh = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(0.75, 1),
+      new THREE.MeshStandardMaterial({
+        color: 0x38bdf8,
+        emissive: 0x38bdf8,
+        emissiveIntensity: 1.2,
+      })
+    );
+    zeroDaySphereMesh.position.set(0, 2.2, -16.5);
+    hangarGroup.add(zeroDaySphereMesh);
+
+    const valveStations: ValveStation3D[] = [];
+    const valvePositions = [
+      new THREE.Vector3(-7.5, 0, -16),
+      new THREE.Vector3(0, 0, -13.5),
+      new THREE.Vector3(7.5, 0, -16),
+    ];
+
+    valvePositions.forEach((vPos) => {
+      const vGrp = new THREE.Group();
+      vGrp.position.copy(vPos);
+
+      const pipe = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.35, 0.45, 1.8, 12),
+        wallMat
+      );
+      pipe.position.y = 0.9;
+      vGrp.add(pipe);
+
+      const wheelGrp = new THREE.Group();
+      wheelGrp.position.y = 1.85;
+      const wheelTorus = new THREE.Mesh(
+        new THREE.TorusGeometry(0.75, 0.1, 10, 24),
+        new THREE.MeshStandardMaterial({
+          color: 0xef4444,
+          emissive: 0xdc2626,
+          emissiveIntensity: 0.6,
+        })
+      );
+      wheelTorus.rotation.x = Math.PI / 2;
+      wheelGrp.add(wheelTorus);
+
+      const spoke1 = new THREE.Mesh(
+        new THREE.BoxGeometry(1.4, 0.08, 0.08),
+        neonCyanMat
+      );
+      const spoke2 = new THREE.Mesh(
+        new THREE.BoxGeometry(0.08, 0.08, 1.4),
+        neonCyanMat
+      );
+      wheelGrp.add(spoke1);
+      wheelGrp.add(spoke2);
+      vGrp.add(wheelGrp);
+
+      const vLight = new THREE.PointLight(0xef4444, 2.5, 8);
+      vLight.position.y = 2.4;
+      vGrp.add(vLight);
+
+      hangarGroup.add(vGrp);
+      valveStations.push({
+        group: vGrp,
+        wheel: wheelGrp,
+        light: vLight,
+        pos: vPos.clone(),
+        progress: 0,
+        completed: false,
+      });
+    });
+
+    const workbenchGroup = new THREE.Group();
+    workbenchGroup.position.set(0, 0, 2);
+    hangarGroup.add(workbenchGroup);
+
+    const benchTable = new THREE.Mesh(
+      new THREE.CylinderGeometry(2.4, 2.8, 1.3, 8),
+      new THREE.MeshStandardMaterial({
+        color: 0x1e1b4b,
+        emissive: 0x7e22ce,
+        emissiveIntensity: 0.45,
+        roughness: 0.3,
+        metalness: 0.8,
+      })
+    );
+    benchTable.position.y = 0.65;
+    workbenchGroup.add(benchTable);
+
+    const forgedVirusOrb = new THREE.Mesh(
+      new THREE.DodecahedronGeometry(0.95, 1),
+      new THREE.MeshStandardMaterial({
+        color: 0xf43f5e,
+        emissive: 0xf43f5e,
+        emissiveIntensity: 1.4,
+      })
+    );
+    forgedVirusOrb.position.y = 2.6;
+    forgedVirusOrb.visible = false;
+    workbenchGroup.add(forgedVirusOrb);
+
+    const rocketGroup3D = new THREE.Group();
+    rocketGroup3D.position.set(0, 0, 32);
+    scene.add(rocketGroup3D);
+
+    const rocketBody = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.8, 2.2, 12, 24),
+      new THREE.MeshStandardMaterial({
+        color: 0xf8fafc,
+        roughness: 0.25,
+        metalness: 0.8,
+      })
+    );
+    rocketBody.position.y = 6.5;
+    rocketGroup3D.add(rocketBody);
+
+    const rocketNose = new THREE.Mesh(
+      new THREE.ConeGeometry(1.8, 4.2, 24),
+      new THREE.MeshStandardMaterial({
+        color: 0xe11d48,
+        emissive: 0x9f1239,
+        emissiveIntensity: 0.5,
+      })
+    );
+    rocketNose.position.y = 14.6;
+    rocketGroup3D.add(rocketNose);
+
+    const rocketFlame = new THREE.Mesh(
+      new THREE.ConeGeometry(2.1, 6.5, 16),
+      new THREE.MeshBasicMaterial({ color: 0xf97316 })
+    );
+    rocketFlame.position.y = -2.2;
+    rocketFlame.rotation.x = Math.PI;
+    rocketFlame.visible = false;
+    rocketGroup3D.add(rocketFlame);
+
+    const playerAvatar3D = createAvatar3DGroup(true);
+    scene.add(playerAvatar3D.root);
+
+    const partnerAvatar3D = createAvatar3DGroup(false);
+    partnerAvatar3D.root.position.set(3.5, 0, 2);
+    scene.add(partnerAvatar3D.root);
+
+    const canyonGroup = new THREE.Group();
+    canyonGroup.visible = false;
+    scene.add(canyonGroup);
+
+    const steve3D = createMinecraftSteve3DGroup(true);
+    canyonGroup.add(steve3D.root);
+
+    const canyonObstacles: CanyonObstacle3D[] = [];
+    const boostRings: BoostRing3D[] = [];
+
+    for (let seg = 0; seg < 28; seg++) {
+      const zPos = -seg * 18;
+      const leftWall = new THREE.Mesh(
+        new THREE.BoxGeometry(8, 36, 16),
+        new THREE.MeshStandardMaterial({
+          color: 0x090418,
+          emissive: seg % 2 === 0 ? 0x0284c7 : 0x7e22ce,
+          emissiveIntensity: 0.35,
+          flatShading: true,
+        })
+      );
+      leftWall.position.set(-22, 16, zPos);
+      canyonGroup.add(leftWall);
+
+      const rightWall = new THREE.Mesh(
+        new THREE.BoxGeometry(8, 36, 16),
+        new THREE.MeshStandardMaterial({
+          color: 0x090418,
+          emissive: seg % 2 === 0 ? 0x7e22ce : 0x0284c7,
+          emissiveIntensity: 0.35,
+          flatShading: true,
+        })
+      );
+      rightWall.position.set(22, 16, zPos);
+      canyonGroup.add(rightWall);
+
+      if (seg >= 2 && seg <= 25) {
+        const obsGrp = new THREE.Group();
+        const ox = ((seg * 7) % 3 - 1) * 7.5;
+        const oy = 7 + ((seg * 5) % 3) * 4.5;
+        obsGrp.position.set(ox, oy, zPos);
+
+        const obsType: CanyonObstacle3D['type'] =
+          seg % 3 === 0
+            ? 'FIREWALL'
+            : seg % 3 === 1
+            ? 'FIBER_CABLE'
+            : 'VOXEL_CLUSTER';
+
+        if (obsType === 'FIREWALL') {
+          const laserWall = new THREE.Mesh(
+            new THREE.BoxGeometry(11, 5.5, 0.45),
+            new THREE.MeshBasicMaterial({
+              color: 0xef4444,
+              transparent: true,
+              opacity: 0.78,
+            })
+          );
+          obsGrp.add(laserWall);
+        } else if (obsType === 'FIBER_CABLE') {
+          const cable = new THREE.Mesh(
+            new THREE.CylinderGeometry(1.1, 1.1, 28, 12),
+            new THREE.MeshStandardMaterial({
+              color: 0x0f172a,
+              emissive: 0x38bdf8,
+              emissiveIntensity: 0.9,
+            })
+          );
+          cable.rotation.z = Math.PI / 3;
+          obsGrp.add(cable);
+        } else {
+          for (let v = 0; v < 5; v++) {
+            const vox = new THREE.Mesh(
+              new THREE.BoxGeometry(2.1, 2.1, 2.1),
+              new THREE.MeshStandardMaterial({
+                color: 0x1e1b4b,
+                emissive: 0xd946ef,
+                emissiveIntensity: 0.85,
+              })
+            );
+            vox.position.set(
+              (v - 2) * 1.3,
+              Math.sin(v * 2) * 1.3,
+              Math.cos(v) * 1.1
+            );
+            obsGrp.add(vox);
+          }
+        }
+
+        canyonGroup.add(obsGrp);
+        canyonObstacles.push({
+          type: obsType,
+          group: obsGrp,
+          z: zPos,
+          x: ox,
+          y: oy,
+          radiusX: obsType === 'FIREWALL' ? 5.6 : 3.4,
+          radiusY: 3.2,
+          hit: false,
+          phase: seg * 0.7,
+        });
+      }
+
+      if (seg >= 3 && seg % 4 === 0 && seg <= 24) {
+        const bx = ((seg / 4) % 2 === 0 ? -1 : 1) * 5.5;
+        const by = 11;
+        const ringMesh = new THREE.Mesh(
+          new THREE.TorusGeometry(2.8, 0.25, 12, 32),
+          new THREE.MeshBasicMaterial({ color: 0xfde047 })
+        );
+        ringMesh.position.set(bx, by, zPos - 8);
+        canyonGroup.add(ringMesh);
+        boostRings.push({
+          mesh: ringMesh,
+          z: zPos - 8,
+          x: bx,
+          y: by,
+          collected: false,
+        });
       }
     }
 
-    const distToVirus = Math.hypot(82 - st.steveX, 74 - st.steveY);
-    const damage = distToVirus < 32 ? 48 : 28;
-    st.virusHp = Math.max(0, st.virusHp - damage);
-    soundFX.playEnemyHit(true);
+    const onKeyDown = (e: KeyboardEvent) => {
+      sim3DRef.current.keys[e.code] = true;
+      if (e.code === 'KeyE') {
+        sim3DRef.current.interactRequested = true;
+      }
+      if (e.code === 'Space' && sim3DRef.current.hologramActive) {
+        e.preventDefault();
+        sim3DRef.current.interactRequested = true;
+      }
+    };
 
-    for (let p = 0; p < (st.virusHp <= 0 ? 36 : 10); p++) {
-      const ang = (Math.PI * 2 * p) / (st.virusHp <= 0 ? 36 : 10);
-      const spd = 12 + (p % 5) * 9;
-      st.particles.push({
-        id: st.nextId++,
-        x: 82,
-        y: 74,
-        vx: Math.cos(ang) * spd,
-        vy: Math.sin(ang) * spd,
-        color:
-          p % 3 === 0 ? '#f43f5e' : p % 3 === 1 ? '#a855f7' : '#fde047',
-        size: st.virusHp <= 0 ? 12 : 7,
-        life: st.virusHp <= 0 ? 1.8 : 0.65,
-      });
-    }
+    const onKeyUp = (e: KeyboardEvent) => {
+      sim3DRef.current.keys[e.code] = false;
+    };
 
-    if (st.virusHp <= 0) {
-      soundFX.playNovaBlast();
-      soundFX.playOrbCollect(10);
+    const onMouseMove = (e: MouseEvent) => {
+      const s = sim3DRef.current;
+      if (s.stage === 'HANGAR_3D' && !s.hologramActive) {
+        if (e.buttons === 1 || document.pointerLockElement === renderer.domElement) {
+          s.camYaw -= e.movementX * 0.005;
+          s.camPitch = Math.max(
+            0.08,
+            Math.min(1.15, s.camPitch + e.movementY * 0.004)
+          );
+        }
+      } else if (s.stage === 'ELYTRA_3D') {
+        const nx = (e.clientX / Math.max(1, window.innerWidth)) * 2 - 1;
+        const ny = (e.clientY / Math.max(1, window.innerHeight)) * 2 - 1;
+        s.elytraYaw = -nx * 0.75;
+        s.elytraPitch = -ny * 0.55;
+        s.elytraRoll = -nx * 0.65;
+      }
+    };
+
+    const onResize = () => {
+      camera.aspect = window.innerWidth / Math.max(1, window.innerHeight);
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('resize', onResize);
+
+    let rafId: number;
+    let lastTime = performance.now();
+
+    const animate = (now: number) => {
+      rafId = requestAnimationFrame(animate);
+      const dt = Math.min(0.05, (now - lastTime) / 1000);
+      lastTime = now;
+      const st = sim3DRef.current;
+
+      dataParticles.rotation.y += dt * 0.04;
+      payloadSphereMesh.rotation.y += dt * 2.4;
+      zeroDaySphereMesh.rotation.y -= dt * 2.2;
+      forgedVirusOrb.rotation.y += dt * 3.0;
+
+      if (st.teleportTarget) {
+        if (st.teleportTarget === 'PARKOUR') {
+          st.playerPos.set(-18, 0, 9.5);
+          st.playerVel.set(0, 0, 0);
+        } else if (st.teleportTarget === 'HOLOGRAM') {
+          st.playerPos.set(12.5, 0, 0);
+          st.playerVel.set(0, 0, 0);
+          st.hologramActive = true;
+          setHologramModalActive(true);
+        } else if (st.teleportTarget === 'VALVES') {
+          st.playerPos.set(0, 0, -11);
+          st.playerVel.set(0, 0, 0);
+        } else if (st.teleportTarget === 'WORKBENCH') {
+          st.playerPos.set(0, 0, 6.5);
+          st.playerVel.set(0, 0, 0);
+        } else {
+          st.playerPos.set(0, 0, 14);
+          st.playerVel.set(0, 0, 0);
+        }
+        st.teleportTarget = null;
+      }
+
+      if (st.stage === 'HANGAR_3D') {
+        hangarGroup.visible = true;
+        rocketGroup3D.visible = true;
+        canyonGroup.visible = false;
+        playerAvatar3D.root.visible = true;
+        partnerAvatar3D.root.visible = true;
+
+        for (let r = 0; r < 3; r++) {
+          if (!st.ringLocked[r]) {
+            st.ringAngles[r] =
+              (st.ringAngles[r] + dt * (1.8 + r * 0.65)) % (Math.PI * 2);
+          }
+          holoRings3D[r].rotation.z = st.ringAngles[r];
+        }
+
+        if (st.hologramActive) {
+          camera.position.lerp(new THREE.Vector3(16, 5.2, 7.5), dt * 6);
+          camera.lookAt(16, 4.8, 0);
+
+          if (st.interactRequested) {
+            st.interactRequested = false;
+            const currentRingIdx = st.ringLocked.findIndex((lk) => !lk);
+            if (currentRingIdx !== -1) {
+              const angle = st.ringAngles[currentRingIdx] % (Math.PI * 2);
+              const normalized =
+                angle > Math.PI ? Math.PI * 2 - angle : angle;
+              if (normalized < 0.72) {
+                st.ringLocked[currentRingIdx] = true;
+                soundFX.init();
+                soundFX.playOrbCollect(6 + currentRingIdx);
+                const lockedCount = st.ringLocked.filter(Boolean).length;
+                setLockedRingsCount(lockedCount);
+                if (lockedCount === 3) {
+                  st.rootCodeCollected = true;
+                  st.hologramActive = false;
+                  setRootCodeDone(true);
+                  setHologramModalActive(false);
+                  showQuickToast('COMPOSANT 2 OBTENU : Code Racine verrouillé !');
+                }
+              } else {
+                soundFX.init();
+                soundFX.playErrorPopupBeep(2);
+                showQuickToast(
+                  'Alignement manqué ! Stoppez l’anneau quand le marqueur doré passe en haut !'
+                );
+              }
+            }
+          }
+
+          renderer.render(scene, camera);
+          return;
+        }
+
+        const moveSpeed = 13.5;
+        let forward = 0;
+        let right = 0;
+        if (st.keys['KeyW'] || st.keys['KeyZ'] || st.keys['ArrowUp']) forward += 1;
+        if (st.keys['KeyS'] || st.keys['ArrowDown']) forward -= 1;
+        if (st.keys['KeyD'] || st.keys['ArrowRight']) right += 1;
+        if (st.keys['KeyA'] || st.keys['KeyQ'] || st.keys['ArrowLeft']) right -= 1;
+
+        const dirX =
+          -Math.sin(st.camYaw) * forward + Math.cos(st.camYaw) * right;
+        const dirZ =
+          -Math.cos(st.camYaw) * forward - Math.sin(st.camYaw) * right;
+        const dirLen = Math.hypot(dirX, dirZ);
+
+        if (dirLen > 0.01) {
+          st.playerPos.x += (dirX / dirLen) * moveSpeed * dt;
+          st.playerPos.z += (dirZ / dirLen) * moveSpeed * dt;
+          playerAvatar3D.root.rotation.y = Math.atan2(dirX, dirZ);
+          playerAvatar3D.leftLeg.rotation.x = Math.sin(now * 0.014) * 0.6;
+          playerAvatar3D.rightLeg.rotation.x = -Math.sin(now * 0.014) * 0.6;
+        } else {
+          playerAvatar3D.leftLeg.rotation.x = 0;
+          playerAvatar3D.rightLeg.rotation.x = 0;
+        }
+
+        if (st.keys['Space'] && st.isGrounded) {
+          st.playerVel.y = 11.2;
+          st.isGrounded = false;
+          soundFX.init();
+          soundFX.playJump();
+        }
+
+        st.playerVel.y -= 24.0 * dt;
+        st.playerPos.y += st.playerVel.y * dt;
+
+        let groundHeight = 0;
+        parkourPlatforms.forEach((plat) => {
+          if (plat.collapsed) {
+            plat.respawnTimer += dt;
+            plat.group.position.y -= dt * 14;
+            if (plat.respawnTimer >= 2.6) {
+              plat.collapsed = false;
+              plat.steppedTime = 0;
+              plat.respawnTimer = 0;
+              plat.group.position.copy(plat.basePos);
+              plat.group.visible = true;
+            }
+            return;
+          }
+
+          if (plat.steppedTime > 0) {
+            plat.steppedTime += dt;
+            plat.group.position.x =
+              plat.basePos.x + Math.sin(now * 0.06) * 0.12;
+            if (plat.steppedTime >= 2.0) {
+              plat.collapsed = true;
+              soundFX.init();
+              soundFX.playBossSlam();
+            }
+          }
+
+          const dx = Math.abs(st.playerPos.x - plat.basePos.x);
+          const dz = Math.abs(st.playerPos.z - plat.basePos.z);
+          const topY = plat.basePos.y + 0.28;
+          if (
+            dx < plat.width * 0.56 &&
+            dz < plat.depth * 0.56 &&
+            st.playerPos.y >= topY - 0.55 &&
+            st.playerVel.y <= 0
+          ) {
+            if (topY > groundHeight) {
+              groundHeight = topY;
+              if (plat.steppedTime === 0) {
+                plat.steppedTime = 0.01;
+              }
+            }
+          }
+        });
+
+        if (st.playerPos.y <= groundHeight) {
+          st.playerPos.y = groundHeight;
+          st.playerVel.y = 0;
+          st.isGrounded = true;
+        }
+
+        playerAvatar3D.root.position.copy(st.playerPos);
+
+        let activePrompt: string | null = null;
+
+        if (!st.payloadCollected) {
+          const dPayload = st.playerPos.distanceTo(payloadSphereMesh.position);
+          if (dPayload < 3.4) {
+            st.payloadCollected = true;
+            payloadSphereMesh.visible = false;
+            setPayloadDone(true);
+            soundFX.init();
+            soundFX.playOrbCollect(8);
+            showQuickToast('COMPOSANT 1 OBTENU : Payload Corrompu récupéré !');
+          } else if (
+            st.playerPos.distanceTo(new THREE.Vector3(-18, 0, 6)) < 7
+          ) {
+            activePrompt =
+              'Parkour de Serveurs : Sautez [ESPACE] sur les racks (ils chutent après 2s) jusqu’à la sphère !';
+          }
+        }
+
+        if (!st.rootCodeCollected) {
+          const dHolo = st.playerPos.distanceTo(holoStationGroup.position);
+          if (dHolo < 5.2) {
+            activePrompt =
+              'Appuyez sur [E] pour ouvrir le Terminal d’Alignement Holographique 3D (Code Racine)';
+            if (st.interactRequested) {
+              st.interactRequested = false;
+              st.hologramActive = true;
+              setHologramModalActive(true);
+            }
+          }
+        }
+
+        if (!st.zeroDayCollected) {
+          st.reactorTimer = Math.max(0, st.reactorTimer - dt);
+          if (st.reactorTimer <= 0 && st.reactorPressure > 0) {
+            st.reactorTimer = 40;
+            st.reactorPressure = 100;
+            valveStations.forEach((v) => {
+              v.progress = 0;
+              v.completed = false;
+            });
+            setValvesClosedCount(0);
+            setReactorPressure(100);
+          }
+          setReactorTimer(Math.ceil(st.reactorTimer));
+
+          valveStations.forEach((vStat, idx) => {
+            if (vStat.completed) return;
+            const dValve = st.playerPos.distanceTo(vStat.pos);
+            if (dValve < 3.6) {
+              activePrompt = `Maintenez [E] pour tourner la Valve Hydraulique #${
+                idx + 1
+              } (${Math.round(vStat.progress)}%)`;
+              if (st.keys['KeyE'] || st.interactRequested) {
+                vStat.progress = Math.min(100, vStat.progress + dt * 75);
+                vStat.wheel.rotation.y += dt * 9;
+                if (vStat.progress >= 100) {
+                  vStat.completed = true;
+                  vStat.light.color.setHex(0x10b981);
+                  const doneCount = valveStations.filter(
+                    (vv) => vv.completed
+                  ).length;
+                  const nextPress = Math.max(0, 100 - doneCount * 34);
+                  st.reactorPressure = nextPress;
+                  setValvesClosedCount(doneCount);
+                  setReactorPressure(nextPress);
+                  soundFX.init();
+                  soundFX.playOrbCollect(5 + doneCount);
+                }
+              }
+            }
+          });
+
+          if (valveStations.every((v) => v.completed)) {
+            reactorLight.color.setHex(0x38bdf8);
+            const dZero = st.playerPos.distanceTo(zeroDaySphereMesh.position);
+            if (dZero < 4.2) {
+              st.zeroDayCollected = true;
+              zeroDaySphereMesh.visible = false;
+              setZeroDayDone(true);
+              soundFX.init();
+              soundFX.playOrbCollect(9);
+              showQuickToast('COMPOSANT 3 OBTENU : Exploit Zéro-Day extrait !');
+            } else {
+              activePrompt =
+                'Pression abaissée ! Approchez-vous du Réacteur pour extraire l’Exploit Zéro-Day !';
+            }
+          }
+        }
+
+        if (
+          st.payloadCollected &&
+          st.rootCodeCollected &&
+          st.zeroDayCollected
+        ) {
+          forgedVirusOrb.visible = true;
+          const dBench = st.playerPos.distanceTo(workbenchGroup.position);
+          if (dBench < 5.2) {
+            activePrompt =
+              'Appuyez sur [E] devant l’Établi Central 3D pour forger le Virus Primordial et tirer la Fusée !';
+            if (st.interactRequested) {
+              st.interactRequested = false;
+              soundFX.init();
+              soundFX.playVoidDimensionSeal();
+              soundFX.playBossRoar();
+              st.stage = 'ROCKET_LAUNCH_3D';
+              st.rocketLaunchElapsed = 0;
+              setStage('ROCKET_LAUNCH_3D');
+            }
+          } else {
+            activePrompt =
+              'Les 3 composants sont réunis ! Rejoignez l’Établi Central 3D au milieu du Hangar !';
+          }
+        }
+
+        st.interactRequested = false;
+        setPromptText(activePrompt);
+
+        const camDist = 9.5;
+        const camX =
+          st.playerPos.x + Math.sin(st.camYaw) * Math.cos(st.camPitch) * camDist;
+        const camY = st.playerPos.y + 3.2 + Math.sin(st.camPitch) * camDist;
+        const camZ =
+          st.playerPos.z + Math.cos(st.camYaw) * Math.cos(st.camPitch) * camDist;
+        camera.position.lerp(new THREE.Vector3(camX, camY, camZ), 0.18);
+        camera.lookAt(
+          st.playerPos.x,
+          st.playerPos.y + 1.8,
+          st.playerPos.z
+        );
+
+        renderer.render(scene, camera);
+        return;
+      }
+
+      if (st.stage === 'ROCKET_LAUNCH_3D') {
+        st.rocketLaunchElapsed += dt;
+        const t = st.rocketLaunchElapsed;
+        rocketFlame.visible = t >= 1.0;
+
+        if (t >= 1.0) {
+          const lift = Math.pow(t - 1.0, 2.2) * 18;
+          rocketGroup3D.position.y = lift;
+        }
+
+        camera.position.set(
+          Math.sin(t * 0.5) * 24,
+          6 + Math.min(30, t * 5),
+          54
+        );
+        camera.lookAt(
+          0,
+          rocketGroup3D.position.y + 8,
+          rocketGroup3D.position.z
+        );
+
+        if (t >= 4.4) {
+          st.stage = 'TYPEWRITER_6_MONTHS';
+          setStage('TYPEWRITER_6_MONTHS');
+        }
+
+        renderer.render(scene, camera);
+        return;
+      }
+
+      if (st.stage === 'ELYTRA_3D') {
+        hangarGroup.visible = false;
+        rocketGroup3D.visible = false;
+        playerAvatar3D.root.visible = false;
+        partnerAvatar3D.root.visible = false;
+        canyonGroup.visible = true;
+
+        if (st.elytraBoostTimer > 0) {
+          st.elytraBoostTimer = Math.max(0, st.elytraBoostTimer - dt);
+        }
+        if (st.elytraBlurTimer > 0) {
+          st.elytraBlurTimer = Math.max(0, st.elytraBlurTimer - dt);
+          setElytraBlur(st.elytraBlurTimer);
+        }
+
+        const currentSpeed = st.elytraBoostTimer > 0 ? 78 : st.elytraSpeed;
+        setElytraBoostActive(st.elytraBoostTimer > 0);
+
+        st.elytraPos.z -= currentSpeed * dt;
+        st.elytraPos.x = THREE.MathUtils.clamp(
+          st.elytraPos.x - st.elytraYaw * 26 * dt,
+          -14,
+          14
+        );
+        st.elytraPos.y = THREE.MathUtils.clamp(
+          st.elytraPos.y + st.elytraPitch * 22 * dt,
+          3.5,
+          22
+        );
+
+        steve3D.root.position.copy(st.elytraPos);
+        steve3D.root.rotation.set(
+          -Math.PI / 2.3 + st.elytraPitch * 0.5,
+          st.elytraYaw * 0.4,
+          st.elytraRoll
+        );
+
+        canyonObstacles.forEach((obs) => {
+          if (obs.type === 'FIREWALL') {
+            obs.group.visible = Math.sin(now * 0.012 + obs.phase) > -0.35;
+          } else if (obs.type === 'VOXEL_CLUSTER') {
+            obs.group.rotation.x += dt * 1.8;
+            obs.group.rotation.y += dt * 2.1;
+          }
+
+          if (!obs.hit && obs.group.visible) {
+            const dz = Math.abs(st.elytraPos.z - obs.z);
+            const dx = Math.abs(st.elytraPos.x - obs.x);
+            const dy = Math.abs(st.elytraPos.y - obs.y);
+            if (dz < 2.2 && dx < obs.radiusX && dy < obs.radiusY) {
+              obs.hit = true;
+              st.elytraHits += 1;
+              st.elytraBlurTimer = 1.25;
+              setElytraHits(st.elytraHits);
+              setElytraBlur(1.25);
+              soundFX.init();
+              soundFX.playPlayerHurt();
+
+              if (st.elytraHits >= 3) {
+                st.elytraHits = 0;
+                st.elytraPos.set(0, 12, 0);
+                canyonObstacles.forEach((o) => {
+                  o.hit = false;
+                });
+                boostRings.forEach((b) => {
+                  b.collected = false;
+                  b.mesh.visible = true;
+                });
+                setElytraHits(0);
+                showQuickToast(
+                  '3 IMPACTS SUBIS ! Retour au checkpoint d’entrée du canyon 3D !'
+                );
+              }
+            }
+          }
+        });
+
+        boostRings.forEach((ring) => {
+          ring.mesh.rotation.z += dt * 3.5;
+          if (!ring.collected) {
+            const dRing = st.elytraPos.distanceTo(ring.mesh.position);
+            if (dRing < 3.8) {
+              ring.collected = true;
+              ring.mesh.visible = false;
+              st.elytraBoostTimer = 1.8;
+              soundFX.init();
+              soundFX.playLightningDash();
+              showQuickToast('⚡ ANNEAU DORÉ FRANCHI : BOOST DE VITESSE ACTIF !');
+            }
+          }
+        });
+
+        const progressPct = Math.min(
+          100,
+          Math.round((Math.abs(st.elytraPos.z) / st.elytraMaxDistance) * 100)
+        );
+        setElytraProgress(progressPct);
+
+        camera.fov = st.elytraBoostTimer > 0 ? 84 : 70;
+        camera.updateProjectionMatrix();
+        camera.position.set(
+          st.elytraPos.x * 0.75,
+          st.elytraPos.y + 2.4,
+          st.elytraPos.z + 7.5
+        );
+        camera.lookAt(
+          st.elytraPos.x,
+          st.elytraPos.y,
+          st.elytraPos.z - 15
+        );
+
+        if (Math.abs(st.elytraPos.z) >= st.elytraMaxDistance) {
+          soundFX.init();
+          soundFX.playBossSlam();
+          soundFX.playCinematicChord(3, true);
+          st.stage = 'CONFRONTATION_3D';
+          setStage('CONFRONTATION_3D');
+        }
+
+        renderer.render(scene, camera);
+        return;
+      }
+
+      if (st.stage === 'CONFRONTATION_3D') {
+        hangarGroup.visible = true;
+        rocketGroup3D.visible = false;
+        canyonGroup.visible = true;
+        canyonObstacles.forEach((o) => {
+          o.group.visible = false;
+        });
+        boostRings.forEach((b) => {
+          b.mesh.visible = false;
+        });
+
+        playerAvatar3D.root.visible = true;
+        playerAvatar3D.root.position.set(-2.5, 0, 10);
+        playerAvatar3D.root.rotation.y = 0;
+
+        partnerAvatar3D.root.visible = true;
+        partnerAvatar3D.root.position.set(2.5, 0, 10);
+        partnerAvatar3D.root.rotation.y = 0;
+
+        steve3D.root.visible = true;
+        steve3D.root.position.set(0, 0, 18);
+        steve3D.root.rotation.set(0, Math.PI, 0);
+
+        camera.fov = 65;
+        camera.updateProjectionMatrix();
+        camera.position.set(
+          Math.sin(now * 0.0005) * 14,
+          5.5,
+          25
+        );
+        camera.lookAt(0, 2.0, 13);
+
+        renderer.render(scene, camera);
+      }
+    };
+
+    rafId = requestAnimationFrame(animate);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('resize', onResize);
+      renderer.dispose();
+    };
+  }, [showQuickToast]);
+
+  const handleCompleteComponentQuick = (which: 1 | 2 | 3) => {
+    const st = sim3DRef.current;
+    soundFX.init();
+    soundFX.playOrbCollect(8);
+    if (which === 1) {
+      st.payloadCollected = true;
+      setPayloadDone(true);
+      showQuickToast('COMPOSANT 1 OBTENU : Payload Corrompu !');
+    } else if (which === 2) {
+      st.rootCodeCollected = true;
+      st.ringLocked = [true, true, true];
+      st.hologramActive = false;
+      setRootCodeDone(true);
+      setHologramModalActive(false);
+      showQuickToast('COMPOSANT 2 OBTENU : Code Racine !');
+    } else {
+      st.zeroDayCollected = true;
+      st.reactorPressure = 0;
+      setZeroDayDone(true);
+      setReactorPressure(0);
+      setValvesClosedCount(3);
+      showQuickToast('COMPOSANT 3 OBTENU : Exploit Zéro-Day !');
     }
   };
 
-  const handleElytraMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (stage !== 'ELYTRA_FLIGHT') return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const nx = ((e.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
-    const ny = ((e.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1;
-    combatRef.current.elytraYaw = nx * 38;
-    combatRef.current.elytraPitch = ny * 28;
-    setElytraYaw(nx * 38);
-    setElytraPitch(ny * 28);
-  };
+  return (
+    <div className="fixed inset-0 z-[130] bg-black text-white font-mono select-none overflow-hidden">
+      <div
+        ref={mount3DRef}
+        style={
+          elytraBlur > 0
+            ? {
+                filter: `blur(${Math.min(6, elytraBlur * 4)}px) contrast(1.4)`,
+              }
+            : undefined
+        }
+        className="fixed inset-0 w-full h-full z-0"
+      />
 
-  if (stage === 'OPEN_WORLD_ARRIVAL') {
-    return (
-      <div className="fixed inset-0 z-[130] bg-[#04020d] text-white font-mono select-none overflow-hidden flex flex-col justify-between">
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              'linear-gradient(180deg, #060318 0%, #1e1b4b 52%, #064e3b 53%, #022c22 100%)',
-          }}
-        />
-        <div
-          className="absolute inset-x-0 bottom-0 h-[47%] opacity-55"
-          style={{
-            backgroundImage:
-              'linear-gradient(rgba(16, 185, 129, 0.35) 1px, transparent 1px), linear-gradient(90deg, rgba(56, 189, 248, 0.35) 1px, transparent 1px)',
-            backgroundSize: '48px 34px',
-            transform: 'perspective(380px) rotateX(62deg) scale(1.5)',
-            transformOrigin: 'center top',
-          }}
-        />
-
-        <div className="relative z-20 pt-6 px-6 flex items-center justify-between">
-          <div className="px-4 py-1.5 rounded-full bg-slate-950/85 border border-cyan-400/50 text-cyan-300 text-xs font-black uppercase tracking-widest flex items-center gap-2">
-            <Globe className="w-4 h-4 text-cyan-400" />
-            PLAINE OPEN-WORLD DU WEB PROFOND • REPAIRE ISOLÉ
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              setStage('WORKSHOP_CRAFT');
-              setStageTime(0);
-            }}
-            className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer"
-          >
-            Entrer dans l’Atelier Intérieur →
-          </button>
+      {toastBanner && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-2xl bg-slate-950/95 border-2 border-amber-400 text-amber-300 text-xs font-black uppercase tracking-wider shadow-[0_0_40px_rgba(251,191,36,0.5)]">
+          {toastBanner}
         </div>
+      )}
 
-        <div className="relative z-20 flex-1 flex flex-col items-center justify-center">
-          <svg viewBox="0 0 800 380" className="w-[90vw] max-w-4xl h-auto">
-            <polygon
-              points="40,240 180,120 310,240"
-              fill="#0f172a"
-              stroke="#38bdf8"
-              strokeWidth="2"
-            />
-            <polygon
-              points="490,240 640,105 770,240"
-              fill="#1e1b4b"
-              stroke="#a855f7"
-              strokeWidth="2"
-            />
-
-            <rect
-              x="270"
-              y="165"
-              width="170"
-              height="95"
-              rx="6"
-              fill="#090d16"
-              stroke="#38bdf8"
-              strokeWidth="3"
-            />
-            <polygon
-              points="255,165 355,105 455,165"
-              fill="#1e293b"
-              stroke="#f43f5e"
-              strokeWidth="3"
-            />
-            <rect
-              x="335"
-              y="205"
-              width="38"
-              height="55"
-              fill="#020617"
-              stroke="#fde047"
-              strokeWidth="2"
-            />
-            <rect
-              x="290"
-              y="182"
-              width="32"
-              height="24"
-              fill="#0ea5e9"
-              opacity="0.75"
-            />
-            <rect
-              x="388"
-              y="182"
-              width="32"
-              height="24"
-              fill="#f43f5e"
-              opacity="0.75"
-            />
-
-            <g transform="translate(545, 110)">
-              <rect x="18" y="40" width="28" height="105" rx="12" fill="#e2e8f0" stroke="#38bdf8" strokeWidth="2.5" />
-              <polygon points="32,5 14,42 50,42" fill="#f43f5e" />
-              <polygon points="18,115 2,145 18,140" fill="#f43f5e" />
-              <polygon points="46,115 62,145 46,140" fill="#f43f5e" />
-              <circle cx="32" cy="72" r="8" fill="#38bdf8" />
-            </g>
-
-            <circle cx="220" cy="245" r="14" fill="#fde047" />
-            <circle cx="250" cy="245" r="14" fill="#f43f5e" />
-          </svg>
-
-          <div className="bg-slate-950/90 border border-cyan-500/50 rounded-2xl px-6 py-4 text-center max-w-xl">
-            <h2 className="text-lg sm:text-xl font-black text-white">
-              Les deux avatars atteignent leur maison isolée dans la plaine du Web profond...
-            </h2>
-            <p className="text-xs text-slate-300 mt-1">
-              Ouverture de l’atelier souterrain de serveurs et de la table de craft du Virus Primordial.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (stage === 'WORKSHOP_CRAFT') {
-    return (
-      <div className="fixed inset-0 z-[130] bg-[#05050a] text-white font-mono select-none overflow-y-auto flex flex-col justify-between p-4 sm:p-8">
-        <div className="max-w-5xl w-full mx-auto space-y-6 my-auto">
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/95 border border-fuchsia-500/50 rounded-2xl px-5 py-3.5 shadow-2xl">
-            <div className="flex items-center gap-3">
-              <Wrench className="w-6 h-6 text-amber-400" />
-              <div>
-                <div className="text-[10px] font-black uppercase tracking-widest text-fuchsia-300">
-                  REPAIRE DES AVATARS • ATELIER INTÉRIEUR DE SERVEURS
-                </div>
-                <h1 className="text-base sm:text-xl font-black text-white">
-                  TABLE DE CRAFT INTERACTIVE — SYNTHÈSE DU « VIRUS PRIMORDIAL »
-                </h1>
+      {stage === 'HANGAR_3D' && (
+        <>
+          <div className="fixed top-4 left-4 right-4 z-30 flex flex-wrap items-center justify-between gap-3 pointer-events-auto">
+            <div className="bg-slate-950/90 border border-fuchsia-500/60 rounded-2xl px-4 py-2.5 backdrop-blur-xl shadow-2xl">
+              <div className="text-[10px] font-black uppercase tracking-widest text-fuchsia-300">
+                OPEN-WORLD INTERNET 3D (THREE.JS) • HANGAR DES AVATARS
               </div>
-            </div>
-            <span className="px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 text-xs font-bold">
-              {selectedComponents.length} / 3 Composants Insérés
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="bg-slate-950/95 border border-slate-800 rounded-2xl p-4 space-y-3">
-              <div className="text-xs font-black uppercase tracking-wider text-cyan-300 flex items-center gap-2 border-b border-slate-800 pb-2">
-                <Terminal className="w-4 h-4" />
-                Écrans Géants &amp; Baies Serveurs
-              </div>
-              <div className="p-3 rounded-xl bg-slate-900 border border-cyan-500/30 text-[11px] space-y-1.5">
-                <div className="text-emerald-400 font-bold">
-                  [SERVER_RACK_01] ONLINE • 128 TB RAM
-                </div>
-                <div className="text-amber-300">
-                  [TARGET_SCAN] Nouvel ordinateur détecté (Trajectoire orbitale prête)
-                </div>
-                <div className="text-rose-400">
-                  [OBJECTIF] Combiner Payload Corrompu + Code Racine + Exploit Zéro-Day
-                </div>
-              </div>
-              <div className="flex items-center justify-around py-3 bg-slate-900/60 rounded-xl border border-slate-800">
-                <div className="text-center">
-                  <div className="w-10 h-10 rounded-full bg-amber-400/20 border border-amber-300 mx-auto flex items-center justify-center text-amber-300 font-black">
-                    C
-                  </div>
-                  <span className="text-[10px] text-amber-200 mt-1 block">
-                    Entité Céleste
-                  </span>
-                </div>
-                <div className="text-center">
-                  <div className="w-10 h-10 rounded-full bg-rose-500/20 border border-rose-400 mx-auto flex items-center justify-center text-rose-300 font-black">
-                    N
-                  </div>
-                  <span className="text-[10px] text-rose-300 mt-1 block">
-                    Souverain du Néant
-                  </span>
-                </div>
+              <div className="text-xs font-bold text-white mt-0.5">
+                ZQSD/Flèches : Marcher • ESPACE : Sauter • Souris (Clic maintenu) : Caméra Orbitale • [E] : Interagir
               </div>
             </div>
 
-            <div className="lg:col-span-2 bg-slate-900/95 border-2 border-amber-400/60 rounded-2xl p-5 space-y-5 shadow-[0_0_60px_rgba(251,191,36,0.2)]">
-              <div className="text-xs font-bold text-slate-300">
-                Cliquez sur les 3 composants ci-dessous pour les combiner sur la Table de Craft :
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  sim3DRef.current.teleportTarget = 'PARKOUR';
+                }}
+                className={`px-3 py-2 rounded-xl border text-xs font-black flex items-center gap-1.5 cursor-pointer ${
+                  payloadDone
+                    ? 'bg-emerald-950/90 border-emerald-400 text-emerald-300'
+                    : 'bg-slate-900/90 border-rose-500/60 text-rose-200 hover:bg-slate-800'
+                }`}
+              >
+                {payloadDone ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Navigation className="w-3.5 h-3.5" />}
+                <span>1. Parkour Serveurs (Payload)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  sim3DRef.current.teleportTarget = 'HOLOGRAM';
+                }}
+                className={`px-3 py-2 rounded-xl border text-xs font-black flex items-center gap-1.5 cursor-pointer ${
+                  rootCodeDone
+                    ? 'bg-emerald-950/90 border-emerald-400 text-emerald-300'
+                    : 'bg-slate-900/90 border-cyan-500/60 text-cyan-200 hover:bg-slate-800'
+                }`}
+              >
+                {rootCodeDone ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Navigation className="w-3.5 h-3.5" />}
+                <span>2. Anneaux Holographiques (Code Racine)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  sim3DRef.current.teleportTarget = 'VALVES';
+                }}
+                className={`px-3 py-2 rounded-xl border text-xs font-black flex items-center gap-1.5 cursor-pointer ${
+                  zeroDayDone
+                    ? 'bg-emerald-950/90 border-emerald-400 text-emerald-300'
+                    : 'bg-slate-900/90 border-amber-500/60 text-amber-200 hover:bg-slate-800'
+                }`}
+              >
+                {zeroDayDone ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Navigation className="w-3.5 h-3.5" />}
+                <span>
+                  3. Valves Réacteur ({valvesClosedCount}/3 • {reactorTimer}s)
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {hologramModalActive && (
+            <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-40 w-[92vw] max-w-lg bg-slate-950/92 border-2 border-cyan-400 rounded-3xl p-5 text-center shadow-[0_0_70px_rgba(56,189,248,0.5)] pointer-events-auto space-y-3">
+              <div className="text-[10px] font-black uppercase tracking-widest text-cyan-300">
+                PUZZLE D’ALIGNEMENT HOLOGRAPHIQUE 3D — ANNEAU {lockedRingsCount + 1} / 3
               </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {CRAFT_COMPONENTS.map((comp) => {
-                  const isAdded = selectedComponents.includes(comp.id);
-                  return (
-                    <button
-                      key={comp.id}
-                      type="button"
-                      onClick={() => handleToggleComponent(comp.id)}
-                      className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
-                        isAdded
-                          ? 'bg-emerald-950/70 border-emerald-400 shadow-[0_0_25px_rgba(16,185,129,0.4)]'
-                          : 'bg-slate-950 hover:bg-slate-800 border-slate-700 hover:border-amber-400'
-                      }`}
-                    >
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <span
-                            className="text-[10px] font-black px-2 py-0.5 rounded"
-                            style={{
-                              backgroundColor: `${comp.color}25`,
-                              color: comp.color,
-                            }}
-                          >
-                            {comp.code}
-                          </span>
-                          {isAdded && (
-                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                          )}
-                        </div>
-                        <div className="text-sm font-black text-white mt-1">
-                          {comp.name}
-                        </div>
-                        <p className="text-[11px] text-slate-400 mt-1 font-sans">
-                          {comp.desc}
-                        </p>
-                      </div>
-                      <div className="mt-3 text-[10px] font-black uppercase tracking-wider text-amber-300">
-                        {isAdded ? '✓ INSÉRÉ DANS LA TABLE' : '+ CLIQUER POUR COMBINER'}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    {[0, 1, 2].map((slotIdx) => {
-                      const compId = selectedComponents[slotIdx];
-                      return (
-                        <div
-                          key={slotIdx}
-                          className={`w-12 h-12 rounded-xl border-2 flex items-center justify-center text-xs font-black ${
-                            compId
-                              ? 'bg-fuchsia-950 border-fuchsia-400 text-fuchsia-200'
-                              : 'bg-slate-900 border-slate-700 text-slate-600'
-                          }`}
-                        >
-                          {compId ? '✓' : slotIdx + 1}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <span className="text-lg font-black text-amber-400">⇒</span>
-                  <div
-                    className={`px-4 py-2.5 rounded-xl border-2 font-black text-xs ${
-                      virusCrafted
-                        ? 'bg-rose-600 border-white text-white animate-pulse'
-                        : selectedComponents.length === 3
-                        ? 'bg-rose-950/90 border-rose-500 text-rose-200'
-                        : 'bg-slate-900 border-slate-800 text-slate-500'
-                    }`}
-                  >
-                    VIRUS PRIMORDIAL
-                  </div>
-                </div>
-
+              <p className="text-xs text-slate-200">
+                Cliquez sur Verrouiller (ou appuyez sur <strong className="text-amber-300">ESPACE</strong>) lorsque le marqueur doré de l’anneau 3D passe sous le cône vert supérieur !
+              </p>
+              <div className="flex items-center justify-center gap-3">
                 <button
                   type="button"
-                  disabled={selectedComponents.length < 3 || virusCrafted}
-                  onClick={handleCraftPrimordialVirus}
-                  className={`px-6 py-3.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all ${
-                    selectedComponents.length === 3 && !virusCrafted
-                      ? 'bg-gradient-to-r from-rose-500 via-amber-400 to-fuchsia-500 text-slate-950 shadow-[0_0_30px_rgba(244,63,94,0.6)] cursor-pointer hover:scale-105'
-                      : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                  }`}
+                  onClick={() => {
+                    sim3DRef.current.interactRequested = true;
+                  }}
+                  className="px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-400 to-emerald-400 text-slate-950 font-black text-xs uppercase cursor-pointer"
                 >
-                  {virusCrafted
-                    ? 'Virus Primordial Fabriqué ! Sortie vers la Fusée...'
-                    : 'Fabriquer le Virus Primordial'}
+                  🔒 Stopper &amp; Verrouiller l’Anneau ({lockedRingsCount}/3)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCompleteComponentQuick(2)}
+                  className="px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-400/40 font-bold text-xs cursor-pointer"
+                >
+                  Forcer Alignement
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    sim3DRef.current.hologramActive = false;
+                    setHologramModalActive(false);
+                  }}
+                  className="px-4 py-3 rounded-xl bg-slate-900 text-slate-400 text-xs cursor-pointer"
+                >
+                  Quitter
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (stage === 'ROCKET_LAUNCH') {
-    const rocketOffsetY = rocketLaunched ? rocketLaunchTime * 155 : 0;
-
-    return (
-      <div className="fixed inset-0 z-[130] bg-[#03010a] text-white font-mono select-none overflow-hidden flex flex-col justify-between p-6">
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              'radial-gradient(circle at 50% 20%, #1e1b4b 0%, #090418 55%, #020108 100%)',
-          }}
-        />
-
-        <div className="relative z-20 flex items-center justify-between">
-          <div className="px-4 py-1.5 rounded-full bg-rose-950/90 border border-rose-500/60 text-rose-300 text-xs font-black uppercase tracking-widest flex items-center gap-2">
-            <Rocket className="w-4 h-4 text-rose-400" />
-            PAS DE TIR EXTÉRIEUR • EXPÉDITION ORBITALE DU VIRUS PRIMORDIAL
-          </div>
-        </div>
-
-        <div className="relative z-20 flex-1 flex flex-col items-center justify-center">
-          <div className="relative w-72 h-80 flex items-center justify-center">
-            <div
-              style={{
-                transform: `translateY(-${rocketOffsetY}px)`,
-              }}
-              className="transition-transform duration-75 flex flex-col items-center"
-            >
-              <svg viewBox="0 0 140 220" className="w-40 h-56 overflow-visible">
-                <polygon
-                  points="70,10 42,68 98,68"
-                  fill="#e11d48"
-                  stroke="#ffffff"
-                  strokeWidth="2.5"
-                />
-                <rect
-                  x="42"
-                  y="68"
-                  width="56"
-                  height="96"
-                  rx="10"
-                  fill="#f8fafc"
-                  stroke="#334155"
-                  strokeWidth="3"
-                />
-                <circle
-                  cx="70"
-                  cy="108"
-                  r="16"
-                  fill={rocketLoaded ? '#e11d48' : '#0f172a'}
-                  stroke="#38bdf8"
-                  strokeWidth="3"
-                />
-                <polygon points="42,128 16,172 42,162" fill="#e11d48" />
-                <polygon points="98,128 124,172 98,162" fill="#e11d48" />
-                {rocketLaunched && (
-                  <g>
-                    <polygon
-                      points="52,164 70,235 88,164"
-                      fill="#f97316"
-                    />
-                    <polygon
-                      points="58,164 70,215 82,164"
-                      fill="#fde047"
-                    />
-                  </g>
-                )}
-              </svg>
-            </div>
-          </div>
-
-          <div className="max-w-lg w-full bg-slate-950/90 border-2 border-amber-400/70 rounded-3xl p-6 text-center shadow-2xl space-y-4">
-            <h2 className="text-xl font-black text-white">
-              {rocketLaunched
-                ? 'FUSÉE EN ORBITE DANS LE CIEL NUMÉRIQUE !'
-                : 'CHARGEMENT DE L’OGIVE « VIRUS PRIMORDIAL »'}
-            </h2>
-            <p className="text-xs text-slate-300 font-sans">
-              {rocketLaunched
-                ? 'Le Virus Primordial quitte l’atmosphère du Web profond et verrouille sa cible...'
-                : 'À l’extérieur du repaire, chargez le Virus Primordial dans la fusée spatiale pour l’expédier en orbite.'}
-            </p>
-            {!rocketLaunched && (
-              <button
-                type="button"
-                onClick={handleLoadAndLaunchRocket}
-                className="w-full py-4 rounded-2xl bg-gradient-to-r from-rose-500 via-orange-500 to-amber-400 hover:from-rose-400 hover:to-amber-300 text-slate-950 font-black text-sm uppercase tracking-wider cursor-pointer shadow-[0_0_35px_rgba(244,63,94,0.6)]"
-              >
-                🚀 Charger le Virus &amp; Expédier la Fusée en Orbite
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (stage === 'TYPEWRITER_6_MONTHS') {
-    return (
-      <div className="fixed inset-0 z-[140] bg-black text-emerald-400 font-mono flex flex-col items-center justify-center p-8 select-none">
-        <div className="text-2xl sm:text-4xl font-black tracking-[0.2em] text-center">
-          {typewriterText}
-          <span className="inline-block w-3 h-7 bg-emerald-400 ml-1 animate-ping align-middle" />
-        </div>
-      </div>
-    );
-  }
-
-  if (stage === 'NEW_PC_STRIKE' || stage === 'STEVE_COMBAT') {
-    const isMeteorFalling =
-      stage === 'NEW_PC_STRIKE' && stageTime >= 0.5 && stageTime < 1.5;
-    const isCornerShattered =
-      stage === 'STEVE_COMBAT' || (stage === 'NEW_PC_STRIKE' && stageTime >= 1.45);
-    const meteorProgress = isMeteorFalling ? (stageTime - 0.5) / 1.0 : 1;
-
-    return (
-      <div
-        onMouseDown={handleSteveSwordAttack}
-        className="fixed inset-0 z-[130] select-none overflow-hidden font-sans flex flex-col justify-between"
-        style={{
-          background:
-            'linear-gradient(135deg, #0284c7 0%, #2563eb 45%, #1e1b4b 100%)',
-        }}
-      >
-        <div className="relative z-20 m-4 px-5 py-3 rounded-2xl bg-slate-950/85 backdrop-blur-xl border border-white/20 flex flex-wrap items-center justify-between gap-3 text-white">
-          <div className="flex items-center gap-3">
-            <ShieldAlert className="w-5 h-5 text-rose-400 animate-pulse" />
-            <div>
-              <div className="text-[10px] font-mono uppercase tracking-widest text-cyan-300">
-                NOUVEL ORDINATEUR (WINDOWS 11 PRO) • 6 MOIS PLUS TARD
-              </div>
-              <div className="text-xs sm:text-sm font-black">
-                {stage === 'NEW_PC_STRIKE'
-                  ? isCornerShattered
-                    ? 'ALERTE : L’icône Wi-Fi a explosé ! Le Virus Primordial sort du coin brisé !'
-                    : 'Système propre et opérationnel...'
-                  : 'INTERVENTION MINECRAFT : Déplacez Steve (ZQSD/WASD) + Clic Gauche (Épée en Netherite) !'}
-              </div>
-            </div>
-          </div>
-
-          {stage === 'STEVE_COMBAT' && (
-            <div className="flex items-center gap-4">
-              <div className="text-xs font-mono font-bold text-amber-300">
-                PV STEVE (NETHERITE) : {'❤️'.repeat(Math.max(1, Math.ceil(steveHp / 4)))}
-              </div>
-              <div className="w-44 bg-slate-900 rounded-full h-3.5 border border-rose-500 overflow-hidden p-0.5">
-                <div
-                  className="h-full bg-gradient-to-r from-rose-600 to-fuchsia-500 rounded-full transition-all"
-                  style={{ width: `${(virusHp / virusMaxHp) * 100}%` }}
-                />
-              </div>
-              <span className="text-xs font-mono font-black text-rose-300">
-                VIRUS : {virusHp} PV
-              </span>
-            </div>
-          )}
-        </div>
-
-        <div className="relative flex-1 w-full overflow-hidden">
-          {isMeteorFalling && (
-            <svg
-              viewBox="0 0 1000 600"
-              className="fixed inset-0 w-full h-full z-40 pointer-events-none"
-            >
-              <line
-                x1="240"
-                y1="0"
-                x2={240 + meteorProgress * 710}
-                y2={meteorProgress * 575}
-                stroke="#ef4444"
-                strokeWidth="10"
-              />
-              <circle
-                cx={240 + meteorProgress * 710}
-                cy={meteorProgress * 575}
-                r="18"
-                fill="#fde047"
-              />
-            </svg>
           )}
 
-          {isCornerShattered && (
-            <div className="absolute right-0 bottom-0 w-[360px] sm:w-[430px] h-[300px] sm:h-[340px] z-30 pointer-events-none">
-              <svg viewBox="0 0 400 320" className="w-full h-full">
-                <polygon
-                  points="140,320 210,175 290,120 400,65 400,320"
-                  fill="#030008"
-                  stroke="#f43f5e"
-                  strokeWidth="4"
-                />
-                <g stroke="#e2e8f0" strokeWidth="2.5" fill="none">
-                  <path d="M210 175 L120 130 L50 140" />
-                  <path d="M290 120 L240 40 L190 10" />
-                  <path d="M140 320 L70 265 L10 280" />
-                  <path d="M210 175 L290 245 L385 210" />
-                </g>
-              </svg>
-
-              {virusHp > 0 && (
-                <div className="absolute right-10 bottom-14 flex flex-col items-center">
-                  <div className="mb-1 px-2.5 py-0.5 rounded bg-rose-950 border border-rose-500 text-[10px] font-mono font-black text-rose-300">
-                    VIRUS PRIMORDIAL ({virusHp}/{virusMaxHp} PV)
-                  </div>
-                  <svg
-                    viewBox="0 0 120 120"
-                    className="w-28 h-28 animate-spin drop-shadow-[0_0_25px_rgba(244,63,94,0.95)]"
-                  >
-                    <polygon
-                      points="60,6 76,40 114,44 84,70 94,108 60,88 26,108 36,70 6,44 44,40"
-                      fill="#090214"
-                      stroke="#f43f5e"
-                      strokeWidth="4"
-                    />
-                    <polygon
-                      points="60,22 98,60 60,98 22,60"
-                      fill="#e11d48"
-                      stroke="#fde047"
-                      strokeWidth="2.5"
-                    />
-                    <circle cx="60" cy="60" r="10" fill="#ffffff" />
-                  </svg>
-                </div>
+          <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-30 w-[95vw] max-w-4xl flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-950/90 border border-white/15 rounded-2xl px-5 py-3 backdrop-blur-xl pointer-events-auto">
+            <div className="text-xs font-bold text-cyan-200">
+              {promptText ||
+                'Explorez le Hangar 3D : récupérez les 3 composants (Parkour, Hologramme, Valves du Réacteur) puis forgez le Virus sur l’Établi Central.'}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {!payloadDone && (
+                <button
+                  type="button"
+                  onClick={() => handleCompleteComponentQuick(1)}
+                  className="px-2.5 py-1.5 rounded-lg bg-rose-500/20 border border-rose-400/50 text-rose-200 text-[10px] font-bold cursor-pointer"
+                >
+                  + Payload
+                </button>
               )}
-            </div>
-          )}
-
-          {stage === 'NEW_PC_STRIKE' && isCornerShattered && (
-            <div className="absolute inset-0 z-40 flex items-center justify-center p-6">
-              <div className="max-w-lg w-full bg-slate-950/95 border-2 border-emerald-400 rounded-3xl p-6 text-center shadow-[0_0_80px_rgba(16,185,129,0.5)] space-y-4">
-                <div className="text-xs font-mono font-black uppercase tracking-widest text-amber-300">
-                  TROU BÉANT DÉTECTÉ • LE VIRUS ATTAQUE LE NOUVEAU PC !
-                </div>
-                <h2 className="text-xl sm:text-2xl font-black text-white">
-                  Pressez « Alt + Tab » ou cliquez ci-dessous pour basculer sur Minecraft !
-                </h2>
+              {!zeroDayDone && (
+                <button
+                  type="button"
+                  onClick={() => handleCompleteComponentQuick(3)}
+                  className="px-2.5 py-1.5 rounded-lg bg-amber-500/20 border border-amber-400/50 text-amber-200 text-[10px] font-bold cursor-pointer"
+                >
+                  + Valves ({reactorPressure}%)
+                </button>
+              )}
+              {payloadDone && rootCodeDone && zeroDayDone && (
                 <button
                   type="button"
                   onClick={() => {
                     soundFX.init();
-                    soundFX.playOrbCollect(8);
-                    setStage('STEVE_COMBAT');
-                    setStageTime(0);
+                    soundFX.playVoidDimensionSeal();
+                    soundFX.playBossRoar();
+                    sim3DRef.current.stage = 'ROCKET_LAUNCH_3D';
+                    sim3DRef.current.rocketLaunchElapsed = 0;
+                    setStage('ROCKET_LAUNCH_3D');
                   }}
-                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-400 via-green-500 to-teal-400 text-slate-950 font-black text-sm uppercase tracking-wider cursor-pointer shadow-lg"
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-500 via-amber-400 to-emerald-400 text-slate-950 font-black text-xs cursor-pointer animate-pulse"
                 >
-                  ⛏️ [ALT + TAB] Ouvrir Minecraft &amp; Déployer Steve (Netherite)
+                  🚀 Forger le Virus &amp; Lancer la Fusée 3D
                 </button>
-              </div>
+              )}
             </div>
-          )}
+          </div>
+        </>
+      )}
 
-          {stage === 'STEVE_COMBAT' && (
-            <>
-              <div className="absolute left-8 top-6 z-20 w-80 sm:w-96 rounded-xl bg-slate-900/95 border-2 border-emerald-500/70 shadow-2xl overflow-hidden pointer-events-none">
-                <div className="bg-emerald-800 px-3 py-1.5 flex items-center justify-between text-[11px] font-mono font-black text-white">
-                  <span>⛏️ Minecraft 1.21.4 — Bastion Netherite</span>
-                  <span>[_][□][X]</span>
-                </div>
-                <div className="p-3 bg-gradient-to-b from-sky-900 to-emerald-950 text-[11px] text-emerald-200 font-mono">
-                  Steve (Armure &amp; Épée en Netherite) est sorti de la fenêtre Minecraft pour défendre votre Bureau !
-                </div>
-              </div>
+      {stage === 'ROCKET_LAUNCH_3D' && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-30 bg-slate-950/90 border-2 border-amber-400 rounded-2xl px-6 py-4 text-center shadow-2xl">
+          <div className="text-xs font-black uppercase tracking-widest text-amber-300 flex items-center justify-center gap-2">
+            <Rocket className="w-4 h-4" />
+            CINÉMATIQUE 3D • DÉCOLLAGE ORBITAL DE LA FUSÉE
+          </div>
+          <div className="text-sm font-bold text-white mt-1">
+            Le Virus Primordial est expédié en orbite dans le ciel numérique...
+          </div>
+        </div>
+      )}
 
-              {virusOrbs.map((orb) => (
-                <div
-                  key={orb.id}
-                  style={{
-                    left: `${orb.x}%`,
-                    top: `${orb.y}%`,
-                    transform: 'translate(-50%, -50%)',
-                  }}
-                  className="absolute z-30 w-6 h-6 rounded-full bg-rose-500 border-2 border-yellow-300 shadow-[0_0_20px_rgba(244,63,94,1)] pointer-events-none"
+      {stage === 'TYPEWRITER_6_MONTHS' && (
+        <div className="fixed inset-0 z-50 bg-black flex items-center justify-center p-8">
+          <div className="text-2xl sm:text-4xl font-black text-emerald-400 tracking-[0.2em] text-center">
+            {typewriterText}
+            <span className="inline-block w-3 h-7 bg-emerald-400 ml-1 animate-ping align-middle" />
+          </div>
+        </div>
+      )}
+
+      {stage === 'WINDOWS_BREACH_TRANSITION' && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col justify-between overflow-hidden"
+          style={{
+            background:
+              'linear-gradient(135deg, #0284c7 0%, #1d4ed8 50%, #0f172a 100%)',
+          }}
+        >
+          <div className="m-6 p-4 rounded-2xl bg-slate-950/90 border border-rose-500/60 max-w-xl">
+            <div className="text-[10px] font-black uppercase tracking-widest text-rose-400">
+              NOUVEAU PC WINDOWS • FRAPPE ORBITALE SUR L’ICÔNE WI-FI
+            </div>
+            <div className="text-sm font-bold text-white mt-1">
+              Le coin inférieur droit de l’écran se brise ! Steve en armure de Netherite saute à travers la brèche en Élytres 3D !
+            </div>
+          </div>
+
+          <div className="relative flex-1">
+            {breachTimer < 1.2 && (
+              <svg viewBox="0 0 1000 600" className="w-full h-full">
+                <line
+                  x1="200"
+                  y1="0"
+                  x2={200 + (breachTimer / 1.2) * 760}
+                  y2={(breachTimer / 1.2) * 580}
+                  stroke="#ef4444"
+                  strokeWidth="12"
                 />
-              ))}
-
-              {particles.map((pt) => (
-                <div
-                  key={pt.id}
-                  style={{
-                    left: `${pt.x}%`,
-                    top: `${pt.y}%`,
-                    width: `${pt.size}px`,
-                    height: `${pt.size}px`,
-                    backgroundColor: pt.color,
-                  }}
-                  className="absolute z-40 rounded-sm pointer-events-none"
-                />
-              ))}
-
-              <div
-                style={{
-                  left: `${stevePos.x}%`,
-                  top: `${stevePos.y}%`,
-                  transform: `translate(-50%, -50%) scale(${
-                    0.75 + steveEntryProgress * 0.25
-                  })`,
-                }}
-                className="absolute z-40 pointer-events-none flex flex-col items-center"
-              >
-                <div className="mb-1 px-2 py-0.5 rounded bg-slate-950/90 border border-purple-400 text-[10px] font-mono font-black text-purple-200 whitespace-nowrap">
-                  {virusHp <= 0
-                    ? '🪽 ÉLYTRES DÉPLOYÉES ! PLONGEON DANS LA BRÈCHE !'
-                    : 'Steve [Armure Netherite] (ZQSD + Clic Gauche)'}
-                </div>
-                <svg
-                  viewBox="0 0 110 120"
-                  className="w-28 h-28 overflow-visible drop-shadow-[0_8px_16px_rgba(0,0,0,0.9)]"
-                  style={{ transform: `scaleX(${steveFacing})` }}
-                >
-                  {virusHp <= 0 && (
-                    <polygon
-                      points="32,38 6,88 42,78"
-                      fill="#94a3b8"
-                      stroke="#38bdf8"
-                      strokeWidth="2.5"
-                    />
-                  )}
-                  <rect
-                    x="38"
-                    y="72"
-                    width="12"
-                    height="32"
-                    fill="#1e1b24"
-                    stroke="#475569"
-                    strokeWidth="2"
+              </svg>
+            )}
+            {breachTimer >= 1.1 && (
+              <div className="absolute right-0 bottom-0 w-96 h-80">
+                <svg viewBox="0 0 400 320" className="w-full h-full">
+                  <polygon
+                    points="120,320 205,160 300,105 400,45 400,320"
+                    fill="#020008"
+                    stroke="#f43f5e"
+                    strokeWidth="5"
                   />
-                  <rect
-                    x="52"
-                    y="72"
-                    width="12"
-                    height="32"
-                    fill="#1e1b24"
-                    stroke="#475569"
-                    strokeWidth="2"
-                  />
-                  <rect
-                    x="34"
-                    y="38"
-                    width="34"
-                    height="34"
-                    fill="#27272a"
-                    stroke="#a855f7"
-                    strokeWidth="2.5"
-                  />
-                  <rect
-                    x="36"
-                    y="12"
-                    width="30"
-                    height="26"
-                    fill="#3f3f46"
-                    stroke="#cbd5e1"
-                    strokeWidth="2.5"
-                  />
-                  <rect x="44" y="21" width="18" height="5" fill="#38bdf8" />
-                  <g
-                    transform={`rotate(${
-                      steveSwingTimer > 0 ? 68 : -15
-                    } 68 48)`}
-                  >
-                    <rect
-                      x="68"
-                      y="8"
-                      width="9"
-                      height="46"
-                      fill="#18181b"
-                      stroke="#c084fc"
-                      strokeWidth="2.5"
-                    />
-                  </g>
                 </svg>
               </div>
-            </>
-          )}
-        </div>
-
-        <div className="relative z-40 h-12 w-full bg-slate-950/95 border-t border-white/15 px-4 flex items-center justify-between text-xs text-slate-200">
-          <div className="flex items-center gap-3">
-            <span className="px-3 py-1 rounded bg-sky-500/20 border border-sky-400/40 font-bold text-sky-300">
-              Démarrer
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                if (stage === 'NEW_PC_STRIKE') {
-                  soundFX.init();
-                  soundFX.playOrbCollect(8);
-                  setStage('STEVE_COMBAT');
-                  setStageTime(0);
-                }
-              }}
-              className="px-3 py-1 rounded bg-emerald-600/30 border border-emerald-400 text-emerald-200 font-black flex items-center gap-1.5 cursor-pointer"
-            >
-              <span>⛏️ Minecraft (Alt+Tab)</span>
-            </button>
+            )}
           </div>
 
-          <div className="flex items-center gap-3">
-            <span
-              className={`px-2.5 py-1 rounded flex items-center gap-1.5 font-mono text-[11px] ${
-                isCornerShattered
-                  ? 'bg-rose-950 border border-rose-500 text-rose-300 animate-pulse'
-                  : 'text-slate-300'
-              }`}
-            >
-              <Wifi className="w-3.5 h-3.5" />
-              {isCornerShattered ? 'ETH_BRISÉ' : 'Wi-Fi 6E'}
-            </span>
-            <Volume2 className="w-4 h-4 text-slate-300" />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (stage === 'ELYTRA_FLIGHT') {
-    const isInOpenWorldSky = elytraProgress >= 52;
-
-    return (
-      <div
-        onMouseMove={handleElytraMouseMove}
-        className="fixed inset-0 z-[135] select-none overflow-hidden font-mono text-white flex flex-col justify-between"
-        style={{
-          background: isInOpenWorldSky
-            ? 'linear-gradient(180deg, #090418 0%, #1e1b4b 48%, #064e3b 52%, #022c22 100%)'
-            : 'radial-gradient(circle at 75% 75%, #f43f5e 0%, #3b0764 38%, #020617 85%)',
-        }}
-      >
-        <div className="relative z-20 p-5 flex items-center justify-between">
-          <div className="px-4 py-2 rounded-2xl bg-slate-950/90 border border-cyan-400/50 text-xs font-black uppercase tracking-wider text-cyan-300">
-            {isInOpenWorldSky
-              ? 'VOL EN ÉLYTRES • DESCENTE PLANÉE VERS L’OPEN-WORLD DES AVATARS'
-              : 'VOL EN ÉLYTRES • PLONGEON DANS LE TROU BÉANT DE L’ÉCRAN BRISÉ'}
-          </div>
-          <div className="px-4 py-2 rounded-xl bg-slate-950/90 border border-amber-400/50 text-xs font-bold text-amber-300">
-            Souris — Pitch : {elytraPitch.toFixed(0)}° | Yaw : {elytraYaw.toFixed(0)}° | Progression : {Math.round(elytraProgress)}%
-          </div>
-        </div>
-
-        <div className="relative flex-1 flex items-center justify-center">
-          <div
-            style={{
-              transform: `translate(${elytraYaw * 4.5}px, ${
-                elytraPitch * 3.5
-              }px) rotate(${elytraYaw * 0.6}deg)`,
-            }}
-            className="transition-transform duration-75 flex flex-col items-center"
-          >
-            <svg
-              viewBox="0 0 180 140"
-              className="w-56 h-44 drop-shadow-[0_0_35px_rgba(56,189,248,0.85)]"
-            >
-              <polygon
-                points="90,28 18,95 76,82"
-                fill="#64748b"
-                stroke="#38bdf8"
-                strokeWidth="3"
-              />
-              <polygon
-                points="90,28 162,95 104,82"
-                fill="#64748b"
-                stroke="#38bdf8"
-                strokeWidth="3"
-              />
-              <rect
-                x="76"
-                y="32"
-                width="28"
-                height="52"
-                fill="#1e1b24"
-                stroke="#a855f7"
-                strokeWidth="2.5"
-              />
-              <rect
-                x="78"
-                y="12"
-                width="24"
-                height="20"
-                fill="#3f3f46"
-                stroke="#f8fafc"
-                strokeWidth="2"
-              />
-            </svg>
-            <span className="mt-2 px-3 py-1 rounded-full bg-slate-950/90 border border-cyan-400 text-xs font-black text-cyan-200">
-              Steve en Élytres (Contrôle 3ème Personne à la Souris)
+          <div className="h-12 bg-slate-950 px-4 flex items-center justify-between text-xs">
+            <span>Démarrer • Minecraft 1.21.4 (Saut dans la Brèche 3D)</span>
+            <span className="text-rose-400 font-bold flex items-center gap-1">
+              <Wifi className="w-4 h-4" /> BRÈCHE OUVERTE
             </span>
           </div>
         </div>
+      )}
 
-        <div className="relative z-20 p-5 text-center text-xs text-slate-300 bg-slate-950/80 border-t border-white/10">
-          Déplacez la souris pour orienter l’angle de piqué (Pitch/Yaw) à travers la brèche dimensionnelle !
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="fixed inset-0 z-[140] bg-[#04020e] text-white font-mono select-none overflow-hidden flex flex-col justify-between p-6 sm:p-10">
-      <div
-        className="absolute inset-0"
-        style={{
-          background:
-            'linear-gradient(180deg, #090418 0%, #1e1b4b 50%, #064e3b 51%, #022c22 100%)',
-        }}
-      />
-
-      <div className="relative z-20 flex items-center justify-between">
-        <div className="px-4 py-1.5 rounded-full bg-emerald-950/90 border border-emerald-400 text-emerald-300 text-xs font-black uppercase tracking-widest">
-          ATTERRISSAGE EN ÉLYTRES RÉUSSI • OPEN-WORLD DES DEUX AVATARS
-        </div>
-      </div>
-
-      <div className="relative z-20 my-auto max-w-3xl w-full mx-auto bg-slate-950/92 border-2 border-emerald-400 rounded-3xl p-8 text-center shadow-[0_0_100px_rgba(16,185,129,0.5)] space-y-5">
-        <div className="flex items-center justify-center gap-8">
-          <div className="px-4 py-2 rounded-2xl bg-purple-950/90 border border-purple-400 text-xs font-black text-purple-200">
-            ⛏️ Steve (Full Netherite &amp; Élytres)
+      {stage === 'ELYTRA_3D' && (
+        <div className="fixed top-4 left-4 right-4 z-30 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
+          <div className="bg-slate-950/90 border border-cyan-400/60 rounded-2xl px-4 py-2.5 backdrop-blur-xl">
+            <div className="text-[10px] font-black uppercase tracking-widest text-cyan-300 flex items-center gap-1.5">
+              <Crosshair className="w-3.5 h-3.5" />
+              VOL EN ÉLYTRES 100% 3D (THREE.JS) • CANYON CYBERSPATIAL
+            </div>
+            <div className="text-xs font-bold text-white mt-0.5">
+              Déplacez la souris (Pitch / Yaw / Roulis) pour éviter les pare-feu laser, câbles de fibre optique et voxels corrompus !
+            </div>
           </div>
-          <Swords className="w-8 h-8 text-amber-400" />
-          <div className="px-4 py-2 rounded-2xl bg-rose-950/90 border border-rose-400 text-xs font-black text-rose-200">
-            ⚡ Entité Céleste &amp; Souverain du Néant
+
+          <div className="flex items-center gap-3 bg-slate-950/90 border border-white/15 rounded-2xl px-4 py-2.5">
+            {elytraBoostActive && (
+              <span className="px-2.5 py-1 rounded bg-amber-400 text-slate-950 font-black text-xs animate-pulse">
+                ⚡ BOOST DORÉ
+              </span>
+            )}
+            <div className="text-xs font-bold text-rose-300">
+              Stabilité : {Math.max(0, 3 - elytraHits)} / 3
+            </div>
+            <div className="w-36 h-3 bg-slate-800 rounded-full overflow-hidden p-0.5">
+              <div
+                className="h-full bg-gradient-to-r from-cyan-400 to-emerald-400 rounded-full"
+                style={{ width: `${elytraProgress}%` }}
+              />
+            </div>
+            <span className="text-xs font-black text-emerald-300">
+              {elytraProgress}%
+            </span>
           </div>
         </div>
+      )}
 
-        <h1 className="text-2xl sm:text-4xl font-black text-white uppercase tracking-wide">
-          STEVE A ATTERRI DANS L’OPEN-WORLD DES AVATARS !
-        </h1>
-        <p className="text-xs sm:text-sm text-slate-300 font-sans leading-relaxed">
-          Après avoir pulvérisé le Virus Primordial sur le nouveau bureau Windows et plongé en Élytres à travers le coin brisé de l’écran, Steve atterrit directement devant le repaire des deux avatars dans le Web profond !
-        </p>
-
-        <div className="flex flex-wrap items-center justify-center gap-4 pt-3">
-          <button
-            type="button"
-            onClick={onReturnToMainMenu}
-            className="px-6 py-4 rounded-2xl bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 text-slate-950 font-black text-xs sm:text-sm flex items-center gap-2 cursor-pointer shadow-lg"
-          >
-            <Home className="w-4 h-4" />
-            Retour au Menu Principal
-          </button>
-          <button
-            type="button"
-            onClick={onRestartFullMiniGame}
-            className="px-6 py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white border border-slate-600 font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer"
-          >
-            <RotateCcw className="w-4 h-4" />
-            Rejouer depuis l’Invasion du Bureau
-          </button>
+      {stage === 'CONFRONTATION_3D' && (
+        <div className="fixed inset-x-0 bottom-8 z-40 flex justify-center px-4 pointer-events-auto">
+          <div className="max-w-2xl w-full bg-slate-950/92 border-2 border-emerald-400 rounded-3xl p-6 text-center shadow-[0_0_90px_rgba(16,185,129,0.5)] backdrop-blur-xl space-y-4">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-xs font-black uppercase tracking-widest">
+              <Swords className="w-4 h-4" />
+              ATTERRISSAGE 3D SUR LE PARVIS DU HANGAR RÉUSSI
+            </div>
+            <h2 className="text-xl sm:text-3xl font-black text-white uppercase">
+              STEVE FAIT FACE AUX DEUX AVATARS DEVANT LE HANGAR 3D !
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-300 font-sans">
+              Après avoir franchi le canyon cyberspatial en Élytres 3D, Steve en armure complète de Netherite atterrit en douceur sur le parvis du hangar 3D des deux avatars pour la confrontation ultime.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={onReturnToMainMenu}
+                className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 text-slate-950 font-black text-xs sm:text-sm flex items-center gap-2 cursor-pointer"
+              >
+                <Home className="w-4 h-4" />
+                Retour au Menu Principal
+              </button>
+              <button
+                type="button"
+                onClick={onRestartFullMiniGame}
+                className="px-5 py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white border border-slate-600 font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Rejouer la Séquence Complète
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
-
-      <div className="relative z-20 text-center text-[11px] text-emerald-300/80">
-        ÉPILOGUE INTERACTIF COMPLET • AETHERIAL HORIZONS × MINECRAFT NETHERITE
-      </div>
+      )}
     </div>
   );
 };

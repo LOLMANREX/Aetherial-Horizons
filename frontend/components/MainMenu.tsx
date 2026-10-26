@@ -70,10 +70,12 @@ interface MainMenuProps {
   onTestFloorTearTransition?: () => void;
   onTestCursorRiposte?: () => void;
   onTestBrowserAntivirus?: () => void;
-  onTestCraftAndRocket?: () => void;
+  onTestHangarHub3D?: () => void;
+  onTestMiniGameParkour3D?: () => void;
+  onTestMiniGameHologram3D?: () => void;
+  onTestMiniGameValves3D?: () => void;
+  onTestElytraFlight3D?: () => void;
   onTestSixMonthsVirus?: () => void;
-  onTestSteveExitCombat?: () => void;
-  onTestElytraFlight?: () => void;
   onTestDefeatBombEnding?: () => void;
   onTestVictoryChainedEnding?: () => void;
   onRestartTransition3D?: () => void;
@@ -118,10 +120,12 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   onTestFloorTearTransition,
   onTestCursorRiposte,
   onTestBrowserAntivirus,
-  onTestCraftAndRocket,
+  onTestHangarHub3D,
+  onTestMiniGameParkour3D,
+  onTestMiniGameHologram3D,
+  onTestMiniGameValves3D,
+  onTestElytraFlight3D,
   onTestSixMonthsVirus,
-  onTestSteveExitCombat,
-  onTestElytraFlight,
   onTestDefeatBombEnding,
   onTestVictoryChainedEnding,
   onRestartTransition3D,
@@ -916,17 +920,73 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                     </button>
                   )}
 
-                  {onTestCraftAndRocket && (
+                  {onTestHangarHub3D && (
                     <button
                       type="button"
                       onClick={() => {
                         setIsOptionsOpen(false);
-                        onTestCraftAndRocket();
+                        onTestHangarHub3D();
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-500 via-purple-500 to-cyan-400 hover:from-fuchsia-400 hover:to-cyan-300 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      Tester Hangar 3D &amp; Mini-Jeux Composants
+                    </button>
+                  )}
+
+                  {onTestMiniGameParkour3D && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOptionsOpen(false);
+                        onTestMiniGameParkour3D();
                       }}
                       className="w-full py-2.5 rounded-xl bg-fuchsia-500/25 hover:bg-fuchsia-500/35 text-fuchsia-200 border border-fuchsia-400/50 font-extrabold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
                     >
                       <Flame className="w-4 h-4 text-fuchsia-300" />
-                      Tester Atelier Craft &amp; Tir Fusée
+                      Tester Mini-Jeu 1 : Parkour Serveurs
+                    </button>
+                  )}
+
+                  {onTestMiniGameHologram3D && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOptionsOpen(false);
+                        onTestMiniGameHologram3D();
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-cyan-500/25 hover:bg-cyan-500/35 text-cyan-200 border border-cyan-400/50 font-extrabold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <Terminal className="w-4 h-4 text-cyan-300" />
+                      Tester Mini-Jeu 2 : Anneaux Holographiques
+                    </button>
+                  )}
+
+                  {onTestMiniGameValves3D && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOptionsOpen(false);
+                        onTestMiniGameValves3D();
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-rose-500/25 hover:bg-rose-500/35 text-rose-200 border border-rose-400/50 font-extrabold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <Settings className="w-4 h-4 text-rose-300" />
+                      Tester Mini-Jeu 3 : Valves Réacteur
+                    </button>
+                  )}
+
+                  {onTestElytraFlight3D && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOptionsOpen(false);
+                        onTestElytraFlight3D();
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-500 via-indigo-500 to-cyan-400 hover:from-purple-400 hover:to-cyan-300 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer"
+                    >
+                      <Play className="w-4 h-4" />
+                      Tester Vol Élytres 3D avec Obstacles
                     </button>
                   )}
 
@@ -937,38 +997,10 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                         setIsOptionsOpen(false);
                         onTestSixMonthsVirus();
                       }}
-                      className="w-full py-2.5 rounded-xl bg-rose-500/25 hover:bg-rose-500/35 text-rose-200 border border-rose-400/50 font-extrabold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                      className="w-full py-2.5 rounded-xl bg-amber-500/25 hover:bg-amber-500/35 text-amber-200 border border-amber-400/50 font-extrabold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
                     >
-                      <Terminal className="w-4 h-4 text-rose-300" />
+                      <Monitor className="w-4 h-4 text-amber-300" />
                       Tester Attaque Virus (6 mois plus tard)
-                    </button>
-                  )}
-
-                  {onTestSteveExitCombat && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsOptionsOpen(false);
-                        onTestSteveExitCombat();
-                      }}
-                      className="w-full py-2.5 rounded-xl bg-emerald-500/25 hover:bg-emerald-500/35 text-emerald-200 border border-emerald-400/50 font-extrabold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
-                    >
-                      <Play className="w-4 h-4 text-emerald-300" />
-                      Tester Sortie Steve Netherite
-                    </button>
-                  )}
-
-                  {onTestElytraFlight && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsOptionsOpen(false);
-                        onTestElytraFlight();
-                      }}
-                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-500 via-indigo-500 to-cyan-400 hover:from-purple-400 hover:to-cyan-300 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer"
-                    >
-                      <Sparkles className="w-4 h-4" />
-                      Tester Vol Élytres vers Open-World
                     </button>
                   )}
 

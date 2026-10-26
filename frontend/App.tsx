@@ -1742,11 +1742,43 @@ export function App() {
     setDesktopMiniGameTriggerKey((prev) => prev + 1);
   }, [triggerCollapseBreakthrough]);
 
-  const handleTestCraftAndRocket = useCallback(() => {
+  const handleTestHangarHub3D = useCallback(() => {
     triggerCollapseBreakthrough();
     gameRef.current.collapseTimer = 5.0;
     setCollapseTime(5.0);
-    setDesktopMiniGameMode('CRAFT_AND_ROCKET');
+    setDesktopMiniGameMode('HANGAR_HUB');
+    setDesktopMiniGameTriggerKey((prev) => prev + 1);
+  }, [triggerCollapseBreakthrough]);
+
+  const handleTestMiniGameParkour3D = useCallback(() => {
+    triggerCollapseBreakthrough();
+    gameRef.current.collapseTimer = 5.0;
+    setCollapseTime(5.0);
+    setDesktopMiniGameMode('MINIGAME_PARKOUR');
+    setDesktopMiniGameTriggerKey((prev) => prev + 1);
+  }, [triggerCollapseBreakthrough]);
+
+  const handleTestMiniGameHologram3D = useCallback(() => {
+    triggerCollapseBreakthrough();
+    gameRef.current.collapseTimer = 5.0;
+    setCollapseTime(5.0);
+    setDesktopMiniGameMode('MINIGAME_HOLOGRAM');
+    setDesktopMiniGameTriggerKey((prev) => prev + 1);
+  }, [triggerCollapseBreakthrough]);
+
+  const handleTestMiniGameValves3D = useCallback(() => {
+    triggerCollapseBreakthrough();
+    gameRef.current.collapseTimer = 5.0;
+    setCollapseTime(5.0);
+    setDesktopMiniGameMode('MINIGAME_VALVES');
+    setDesktopMiniGameTriggerKey((prev) => prev + 1);
+  }, [triggerCollapseBreakthrough]);
+
+  const handleTestElytraFlight3D = useCallback(() => {
+    triggerCollapseBreakthrough();
+    gameRef.current.collapseTimer = 5.0;
+    setCollapseTime(5.0);
+    setDesktopMiniGameMode('ELYTRA_FLIGHT_3D');
     setDesktopMiniGameTriggerKey((prev) => prev + 1);
   }, [triggerCollapseBreakthrough]);
 
@@ -1755,22 +1787,6 @@ export function App() {
     gameRef.current.collapseTimer = 5.0;
     setCollapseTime(5.0);
     setDesktopMiniGameMode('SIX_MONTHS_VIRUS');
-    setDesktopMiniGameTriggerKey((prev) => prev + 1);
-  }, [triggerCollapseBreakthrough]);
-
-  const handleTestSteveExitCombat = useCallback(() => {
-    triggerCollapseBreakthrough();
-    gameRef.current.collapseTimer = 5.0;
-    setCollapseTime(5.0);
-    setDesktopMiniGameMode('STEVE_EXIT_COMBAT');
-    setDesktopMiniGameTriggerKey((prev) => prev + 1);
-  }, [triggerCollapseBreakthrough]);
-
-  const handleTestElytraFlight = useCallback(() => {
-    triggerCollapseBreakthrough();
-    gameRef.current.collapseTimer = 5.0;
-    setCollapseTime(5.0);
-    setDesktopMiniGameMode('ELYTRA_FLIGHT');
     setDesktopMiniGameTriggerKey((prev) => prev + 1);
   }, [triggerCollapseBreakthrough]);
 
@@ -6203,10 +6219,12 @@ export function App() {
         onTestFloorTearTransition={handleTestFloorTearTransition}
         onTestCursorRiposte={handleTestCursorRiposte}
         onTestBrowserAntivirus={handleTestBrowserAntivirus}
-        onTestCraftAndRocket={handleTestCraftAndRocket}
+        onTestHangarHub3D={handleTestHangarHub3D}
+        onTestMiniGameParkour3D={handleTestMiniGameParkour3D}
+        onTestMiniGameHologram3D={handleTestMiniGameHologram3D}
+        onTestMiniGameValves3D={handleTestMiniGameValves3D}
+        onTestElytraFlight3D={handleTestElytraFlight3D}
         onTestSixMonthsVirus={handleTestSixMonthsVirus}
-        onTestSteveExitCombat={handleTestSteveExitCombat}
-        onTestElytraFlight={handleTestElytraFlight}
         onTestDefeatBombEnding={handleTestDefeatBombEnding}
         onTestVictoryChainedEnding={handleTestVictoryChainedEnding}
         onRestartTransition3D={handleRestartTransition3D}

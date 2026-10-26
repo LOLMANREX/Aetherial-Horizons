@@ -34,10 +34,12 @@ export type DesktopMiniGameInitialMode =
   | 'TRANSITION'
   | 'CURSOR_RIPOSTE'
   | 'BROWSER_ANTIVIRUS'
-  | 'CRAFT_AND_ROCKET'
+  | 'HANGAR_HUB'
+  | 'MINIGAME_PARKOUR'
+  | 'MINIGAME_HOLOGRAM'
+  | 'MINIGAME_VALVES'
+  | 'ELYTRA_FLIGHT_3D'
   | 'SIX_MONTHS_VIRUS'
-  | 'STEVE_EXIT_COMBAT'
-  | 'ELYTRA_FLIGHT'
   | 'DEFEAT_CINEMATIC'
   | 'VICTORY_CINEMATIC';
 
@@ -226,10 +228,12 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
     if (mode === 'VICTORY_CINEMATIC') return 'VICTORY';
     if (mode === 'CURSOR_RIPOSTE' || mode === 'BROWSER_ANTIVIRUS') return 'PLAYING';
     if (
-      mode === 'CRAFT_AND_ROCKET' ||
-      mode === 'SIX_MONTHS_VIRUS' ||
-      mode === 'STEVE_EXIT_COMBAT' ||
-      mode === 'ELYTRA_FLIGHT'
+      mode === 'HANGAR_HUB' ||
+      mode === 'MINIGAME_PARKOUR' ||
+      mode === 'MINIGAME_HOLOGRAM' ||
+      mode === 'MINIGAME_VALVES' ||
+      mode === 'ELYTRA_FLIGHT_3D' ||
+      mode === 'SIX_MONTHS_VIRUS'
     ) {
       return 'EPILOGUE_SEQUENCE';
     }
@@ -239,10 +243,12 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
   const resolveEpilogueSubPhase = (
     mode: DesktopMiniGameInitialMode
   ): EpilogueStartSubPhase => {
+    if (mode === 'MINIGAME_PARKOUR') return 'MINIGAME_PARKOUR';
+    if (mode === 'MINIGAME_HOLOGRAM') return 'MINIGAME_HOLOGRAM';
+    if (mode === 'MINIGAME_VALVES') return 'MINIGAME_VALVES';
+    if (mode === 'ELYTRA_FLIGHT_3D') return 'ELYTRA_FLIGHT_3D';
     if (mode === 'SIX_MONTHS_VIRUS') return 'SIX_MONTHS_VIRUS';
-    if (mode === 'STEVE_EXIT_COMBAT') return 'STEVE_EXIT_COMBAT';
-    if (mode === 'ELYTRA_FLIGHT') return 'ELYTRA_FLIGHT';
-    return 'CRAFT_AND_ROCKET';
+    return 'HANGAR_HUB';
   };
 
   const [phase, setPhase] = useState<DesktopPhase>(() =>
@@ -657,7 +663,7 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
 
         if (t >= 5.6) {
           st.phase = 'EPILOGUE_SEQUENCE';
-          setEpilogueSubPhase('CRAFT_AND_ROCKET');
+          setEpilogueSubPhase('HANGAR_HUB');
           setPhase('EPILOGUE_SEQUENCE');
         }
         return;
