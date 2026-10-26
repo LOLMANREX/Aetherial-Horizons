@@ -8,6 +8,7 @@ const PROGRESSION_KEY = 'aetherial_horizons_progression_v1';
 export interface PersistentProgressionState {
   badEndingCompleted: boolean;
   goodEndingCompleted: boolean;
+  secretDesktopEndingCompleted?: boolean;
 }
 
 export const SaveManager = {
@@ -21,14 +22,19 @@ export const SaveManager = {
       const goodFlag =
         localStorage.getItem('goodEndingCompleted') === 'true' ||
         Boolean(parsed.goodEndingCompleted);
+      const secretFlag =
+        localStorage.getItem('secretDesktopEndingCompleted') === 'true' ||
+        Boolean(parsed.secretDesktopEndingCompleted);
       return {
         badEndingCompleted: badFlag,
         goodEndingCompleted: goodFlag,
+        secretDesktopEndingCompleted: secretFlag,
       };
     } catch {
       return {
         badEndingCompleted: false,
         goodEndingCompleted: false,
+        secretDesktopEndingCompleted: false,
       };
     }
   },
@@ -38,6 +44,10 @@ export const SaveManager = {
       localStorage.setItem(PROGRESSION_KEY, JSON.stringify(state));
       localStorage.setItem('badEndingCompleted', String(state.badEndingCompleted));
       localStorage.setItem('goodEndingCompleted', String(state.goodEndingCompleted));
+      localStorage.setItem(
+        'secretDesktopEndingCompleted',
+        String(Boolean(state.secretDesktopEndingCompleted))
+      );
     } catch {}
   },
 
@@ -61,6 +71,16 @@ export const SaveManager = {
     return next;
   },
 
+  setSecretDesktopEndingCompleted(completed = true): PersistentProgressionState {
+    const current = this.getState();
+    const next: PersistentProgressionState = {
+      ...current,
+      secretDesktopEndingCompleted: completed,
+    };
+    this.saveState(next);
+    return next;
+  },
+
   isBadEndingCompleted(): boolean {
     return this.getState().badEndingCompleted;
   },
@@ -75,6 +95,7 @@ export const SaveManager = {
       localStorage.removeItem(PROGRESSION_KEY);
       localStorage.removeItem('badEndingCompleted');
       localStorage.removeItem('goodEndingCompleted');
+      localStorage.removeItem('secretDesktopEndingCompleted');
     } catch {}
     [1, 2, 3].forEach((slotId) => {
       deleteSaveSlot(slotId);
@@ -82,6 +103,7 @@ export const SaveManager = {
     return {
       badEndingCompleted: false,
       goodEndingCompleted: false,
+      secretDesktopEndingCompleted: false,
     };
   },
 };

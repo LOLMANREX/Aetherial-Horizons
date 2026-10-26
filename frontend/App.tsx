@@ -1693,6 +1693,13 @@ export function App() {
     updateScreen('MAIN_MENU');
   }, [exitLockSafe, performSave, updateScreen]);
 
+  const handleVictoryDesktopMiniGame = useCallback(() => {
+    const next = SaveManager.setSecretDesktopEndingCompleted(true);
+    setProgressionState(next);
+    handleReturnToMainMenu();
+    showToast('SUCCÈS SECRET VALIDÉ : Menaces Neutralisées & Desktop Pets Asservis !');
+  }, [handleReturnToMainMenu, showToast]);
+
   const handleToggleCamera = useCallback(() => {
     const nextMode =
       gameRef.current.cameraMode === 'FIRST_PERSON'
@@ -3096,13 +3103,6 @@ export function App() {
       }
 
       if (scr === 'COLLAPSE_BREAKTHROUGH') {
-        if (
-          (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Space') &&
-          gameRef.current.collapseTimer >= 19.5
-        ) {
-          e.preventDefault();
-          handleReturnToMainMenu();
-        }
         return;
       }
 
@@ -4258,286 +4258,19 @@ export function App() {
 
       if (state.screen === 'COLLAPSE_BREAKTHROUGH') {
         state.collapseTimer += dt;
-        const t = state.collapseTimer;
-
-        hudSyncTimer += dt;
-        if (hudSyncTimer >= 0.033 || (t >= 15.5 && t < 15.6) || (t >= 19.5 && t < 19.6)) {
-          hudSyncTimer = 0;
-          setCollapseTime(t);
-        }
-
-        if (t >= 15.5) {
-          if (!state.collapseSilenced) {
-            state.collapseSilenced = true;
-            soundFX.silenceAll();
-            setSceneWireframeMode(false);
-            playerGroup.scale.set(1, 1, 1);
-            playerGroup.visible = false;
-            alterEgo.group.visible = false;
-            droppedWeaponsGroup.visible = false;
-            dissolutionParticles.visible = false;
-            camera.fov = 70;
-            camera.up.set(0, 1, 0);
-            camera.updateProjectionMatrix();
-          }
-          renderer.render(scene, camera);
-          return;
-        }
-
-        if (t >= 0.42 && !state.collapseWeaponDropPlayed) {
-          state.collapseWeaponDropPlayed = true;
-          soundFX.playWeaponDrop();
-        }
-
-        if (t >= 5.8 && t < 14.8) {
-          state.collapseGlitchSoundTimer += dt;
-          const glitchInterval = t >= 10.0 ? 0.19 : 0.34;
-          if (state.collapseGlitchSoundTimer >= glitchInterval) {
-            state.collapseGlitchSoundTimer = 0;
-            soundFX.playGlitchBurst(t >= 10.0 ? 1.35 : 0.85);
-          }
-        }
-
-        if (t >= 8.4 && t < 14.8) {
-          const expectedPopups = Math.min(
-            15,
-            Math.floor((t - 8.4) / 0.26) + 1
-          );
-          if (expectedPopups > state.collapsePopupSoundCount) {
-            state.collapsePopupSoundCount = expectedPopups;
-            soundFX.playErrorPopupBeep(expectedPopups);
-          }
-        }
-
-        if (t >= 14.82 && !state.collapseCrashSoundPlayed) {
-          state.collapseCrashSoundPlayed = true;
-          soundFX.playPiercingGlitchCrash();
-        }
-
         fpViewModel.group.visible = false;
+        playerGroup.visible = false;
+        alterEgo.group.visible = false;
+        droppedWeaponsGroup.visible = false;
+        dissolutionParticles.visible = false;
         if (state.bossInstance) {
           state.bossInstance.group.visible = false;
         }
-
+        setSceneWireframeMode(false);
         const cY = getTerrainHeight(0, 0);
-
-        const dropProgress = Math.max(0, Math.min(1, t / 0.72));
-        const dropBounce =
-          dropProgress < 0.8
-            ? 1 - (dropProgress / 0.8) * (dropProgress / 0.8)
-            : Math.sin(((dropProgress - 0.8) / 0.2) * Math.PI) * 0.08;
-        const swordY = cY + 0.08 + dropBounce * 0.95;
-
-        droppedWeaponsGroup.visible = t < 14.6;
-        droppedCelestialSword.setCorruptedMode(false, true, now * 0.001);
-        droppedVoidSword.setCorruptedMode(true, false, now * 0.001);
-
-        droppedCelestialSword.swordRoot.position.set(-0.92, swordY, 0.55);
-        droppedCelestialSword.swordRoot.rotation.set(
-          Math.PI / 2,
-          0.35,
-          -0.4 + dropProgress * 1.85
-        );
-
-        droppedVoidSword.swordRoot.position.set(0.92, swordY, 0.55);
-        droppedVoidSword.swordRoot.rotation.set(
-          Math.PI / 2,
-          -0.35,
-          0.4 - dropProgress * 1.85
-        );
-
-        const turnProgress = Math.max(0, Math.min(1, (t - 0.8) / 2.8));
-        const smoothTurn =
-          turnProgress * turnProgress * (3 - 2 * turnProgress);
-
-        const leftYaw = THREE.MathUtils.lerp(
-          -Math.PI / 2,
-          Math.PI - 0.16,
-          smoothTurn
-        );
-        const rightYaw = THREE.MathUtils.lerp(
-          Math.PI / 2,
-          Math.PI + 0.16,
-          smoothTurn
-        );
-
-        const dissolveP = t >= 11.8 ? Math.max(0, Math.min(1, (t - 11.8) / 3.1)) : 0;
-        const avatarRemain = Math.max(0.001, 1 - dissolveP * 1.12);
-        const glitchLevel =
-          t < 5.8
-            ? 0.08
-            : Math.min(2.2, 0.35 + ((t - 5.8) / 8.0) * 1.85);
-
-        const jitterLeftX =
-          t >= 5.8 ? Math.sin(now * 0.065) * 0.12 * glitchLevel : 0;
-        const jitterRightX =
-          t >= 5.8 ? Math.cos(now * 0.072) * 0.12 * glitchLevel : 0;
-        const collapseYOffset = dissolveP * 0.45;
-
-        playerGroup.visible = avatarRemain > 0.02;
-        playerGroup.position.set(-1.25 + jitterLeftX, cY + collapseYOffset, 0);
-        playerGroup.rotation.set(0, leftYaw, 0);
-        playerGroup.scale.set(
-          avatarRemain,
-          avatarRemain * (1 + dissolveP * 0.6),
-          avatarRemain
-        );
-
-        alterEgo.group.visible = avatarRemain > 0.02;
-        alterEgo.group.position.set(1.25 + jitterRightX, cY + collapseYOffset, 0);
-        alterEgo.group.rotation.set(0, rightYaw, 0);
-        const alterBaseScale = 1.08 * avatarRemain;
-        alterEgo.group.scale.set(
-          alterBaseScale,
-          alterBaseScale * (1 + dissolveP * 0.6),
-          alterBaseScale
-        );
-
-        const gazePitch = smoothTurn * 0.06;
-
-        humanoid.updateAnimation({
-          dt,
-          time: now,
-          speed: 0,
-          forwardInput: 0,
-          rightInput: 0,
-          isSprinting: false,
-          isGrounded: true,
-          isSwimming: false,
-          headPitch: gazePitch,
-          equippedWeapon: 'SWORD',
-          attackProgress: 0,
-          bowDrawProgress: 0,
-          bowReleaseTimer: 0,
-          hasArrows: true,
-          isSeatedOnThrone: false,
-          isCorrupted: false,
-          isCelestial: true,
-          glitchIntensity: t >= 5.8 ? glitchLevel * 0.85 : 0,
-          weaponsDropped: true,
-        });
-
-        alterEgo.updateAnimation({
-          dt,
-          time: now,
-          speed: 0,
-          forwardInput: 0,
-          rightInput: 0,
-          isSprinting: false,
-          isGrounded: true,
-          isSwimming: false,
-          headPitch: gazePitch,
-          equippedWeapon: 'SWORD',
-          attackProgress: 0,
-          bowDrawProgress: 0,
-          bowReleaseTimer: 0,
-          hasArrows: true,
-          isSeatedOnThrone: false,
-          isCorrupted: true,
-          isCelestial: false,
-          glitchIntensity: glitchLevel,
-          weaponsDropped: true,
-        });
-
-        if (t >= 11.8) {
-          dissolutionParticles.visible = true;
-          const posAttr = dissolveGeo.getAttribute(
-            'position'
-          ) as THREE.BufferAttribute;
-          for (let i = 0; i < dissolveCount; i++) {
-            const bx = dissolveBasePositions[i * 3];
-            const by = dissolveBasePositions[i * 3 + 1];
-            const bz = dissolveBasePositions[i * 3 + 2];
-            const vx = dissolveVelocities[i * 3];
-            const vy = dissolveVelocities[i * 3 + 1];
-            const vz = dissolveVelocities[i * 3 + 2];
-            const swirl = dissolveP * 3.8 + i * 0.05;
-            const px =
-              bx +
-              vx * dissolveP * 1.45 +
-              Math.sin(swirl) * 0.45 * dissolveP;
-            const py =
-              cY +
-              by +
-              vy * dissolveP * 1.35 +
-              Math.cos(swirl * 1.3) * 0.25;
-            const pz =
-              bz +
-              vz * dissolveP * 1.45 +
-              Math.cos(swirl) * 0.45 * dissolveP;
-            posAttr.setXYZ(i, px, py, pz);
-          }
-          posAttr.needsUpdate = true;
-          dissolveMat.opacity = Math.max(0.15, 1 - Math.max(0, (t - 14.4) / 1.1));
-        } else {
-          dissolutionParticles.visible = false;
-        }
-
-        const shouldWireframe =
-          t >= 5.8 &&
-          (t >= 8.4 || Math.sin(t * 26) > 0.15);
-        setSceneWireframeMode(shouldWireframe, t);
-
-        if (shouldWireframe) {
-          const strobeBg =
-            Math.sin(t * 42) > 0.72
-              ? new THREE.Color(0x052e16)
-              : new THREE.Color(0x020617);
-          scene.background = strobeBg;
-          fog.color.copy(strobeBg);
-        } else {
-          scene.background = currentSkyColor;
-          fog.color.copy(currentSkyColor);
-        }
-
-        const dollyProgress = Math.min(1, t / 5.5);
-        const baseCamZ = THREE.MathUtils.lerp(5.8, 3.85, dollyProgress);
-        const baseCamY = cY + THREE.MathUtils.lerp(2.15, 1.78, dollyProgress);
-
-        let camJitterX = 0;
-        let camJitterY = Math.sin(now * 0.0018) * 0.06;
-        let camJitterZ = 0;
-        let lookOffsetX = 0;
-        let lookOffsetY = 0;
-
-        if (t >= 5.8) {
-          const trackLoss = Math.min(1.8, (t - 5.8) / 5.5);
-          const slipSpike = Math.sin(t * 19) > 0.78 ? 1.85 : 0.35;
-          camJitterX =
-            Math.sin(now * 0.053) * 0.45 * trackLoss * slipSpike +
-            (Math.random() - 0.5) * 0.22 * trackLoss;
-          camJitterY =
-            Math.cos(now * 0.061) * 0.35 * trackLoss * slipSpike +
-            (Math.random() - 0.5) * 0.18 * trackLoss;
-          camJitterZ = Math.sin(now * 0.039) * 0.4 * trackLoss;
-          lookOffsetX = Math.sin(now * 0.047) * 0.55 * trackLoss * slipSpike;
-          lookOffsetY = Math.cos(now * 0.059) * 0.38 * trackLoss;
-
-          const rollAngle =
-            Math.sin(now * 0.034) * 0.22 * trackLoss +
-            (Math.sin(t * 27) > 0.82 ? 0.32 : 0);
-          camera.up.set(Math.sin(rollAngle), Math.cos(rollAngle), 0);
-
-          camera.fov =
-            70 +
-            Math.sin(now * 0.045) * 14 * trackLoss +
-            (Math.cos(t * 31) > 0.8 ? 14 : 0);
-          camera.updateProjectionMatrix();
-        } else {
-          camera.up.set(0, 1, 0);
-          if (Math.abs(camera.fov - 70) > 0.1) {
-            camera.fov = 70;
-            camera.updateProjectionMatrix();
-          }
-        }
-
-        camera.position.set(
-          camJitterX,
-          baseCamY + camJitterY,
-          baseCamZ + camJitterZ
-        );
-        camera.lookAt(lookOffsetX, cY + 1.52 + lookOffsetY, 0);
-
+        camera.up.set(0, 1, 0);
+        camera.position.set(0, cY + 2.2, 5.5);
+        camera.lookAt(0, cY + 1.5, 0);
         renderer.render(scene, camera);
         return;
       }
@@ -6131,6 +5864,7 @@ export function App() {
         collapseTime={collapseTime}
         badEndingCompleted={progressionState.badEndingCompleted}
         goodEndingCompleted={progressionState.goodEndingCompleted}
+        secretDesktopEndingCompleted={progressionState.secretDesktopEndingCompleted}
         onStartNewGame={handleStartNewGame}
         onLoadGame={handleLoadGame}
         onSaveCurrentGame={performSave}
@@ -6151,6 +5885,8 @@ export function App() {
         onForceBossPhase3={handleForceBossPhase3}
         onForceBossZeroHp={handleForceBossZeroHp}
         onLaunchFourthWallCutscene={triggerCollapseBreakthrough}
+        onTestWindowsDesktopMiniGame={triggerCollapseBreakthrough}
+        onVictoryDesktopMiniGame={handleVictoryDesktopMiniGame}
       />
     </div>
   );
