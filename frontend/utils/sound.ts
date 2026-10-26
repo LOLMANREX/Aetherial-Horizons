@@ -476,6 +476,132 @@ class SoundEffects {
       });
     } catch {}
   }
+
+  public playWeaponDrop(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+
+    try {
+      const now = ctx.currentTime;
+      const clangs = [880, 1320, 620, 410];
+      clangs.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = idx % 2 === 0 ? 'triangle' : 'square';
+        const t0 = now + idx * 0.07;
+        osc.frequency.setValueAtTime(freq, t0);
+        osc.frequency.exponentialRampToValueAtTime(freq * 0.45, t0 + 0.18);
+        gain.gain.setValueAtTime(0.11, t0);
+        gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.2);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t0);
+        osc.stop(t0 + 0.21);
+      });
+    } catch {}
+  }
+
+  public playErrorPopupBeep(index = 0): void {
+    const ctx = this.getContext();
+    if (!ctx || ctx.state !== 'running') return;
+
+    try {
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'square';
+      const base = 520 + (index % 7) * 95;
+      osc.frequency.setValueAtTime(base, now);
+      osc.frequency.setValueAtTime(base * 0.72, now + 0.045);
+      gain.gain.setValueAtTime(0.09, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.12);
+    } catch {}
+  }
+
+  public playGlitchBurst(intensity = 1): void {
+    const ctx = this.getContext();
+    if (!ctx || ctx.state !== 'running') return;
+
+    try {
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      const f1 = 180 + Math.random() * 1400;
+      const f2 = 60 + Math.random() * 900;
+      osc.frequency.setValueAtTime(f1, now);
+      osc.frequency.setValueAtTime(f2, now + 0.03);
+      osc.frequency.setValueAtTime(f1 * 1.4, now + 0.06);
+      gain.gain.setValueAtTime(Math.min(0.16, 0.07 * intensity), now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.095);
+    } catch {}
+  }
+
+  public playPiercingGlitchCrash(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+
+    try {
+      const now = ctx.currentTime;
+      const duration = 0.68;
+
+      const bufferSize = Math.floor(ctx.sampleRate * duration);
+      const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const output = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = (Math.random() * 2 - 1) * (i % 14 < 7 ? 1.0 : -0.8);
+      }
+
+      const whiteNoise = ctx.createBufferSource();
+      whiteNoise.buffer = noiseBuffer;
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.24, now);
+      noiseGain.gain.setValueAtTime(0.32, now + duration - 0.05);
+      noiseGain.gain.setValueAtTime(0.0, now + duration);
+      whiteNoise.connect(noiseGain);
+      noiseGain.connect(ctx.destination);
+      whiteNoise.start(now);
+      whiteNoise.stop(now + duration);
+
+      const freqs = [2480, 3120, 185, 62];
+      freqs.forEach((f, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = idx < 2 ? 'square' : 'sawtooth';
+        osc.frequency.setValueAtTime(f, now);
+        osc.frequency.linearRampToValueAtTime(idx < 2 ? f * 1.38 : f * 0.4, now + duration - 0.02);
+        gain.gain.setValueAtTime(idx < 2 ? 0.14 : 0.2, now);
+        gain.gain.setValueAtTime(0.0, now + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + duration);
+      });
+    } catch {}
+  }
+
+  public silenceAll(): void {
+    if (!this.ctx) return;
+    try {
+      if (this.ctx.state === 'running') {
+        this.ctx.suspend().catch(() => {});
+      }
+    } catch {}
+  }
 }
 
 export const soundFX = new SoundEffects();

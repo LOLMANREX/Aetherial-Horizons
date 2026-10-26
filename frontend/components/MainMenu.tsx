@@ -23,7 +23,207 @@ import {
   KeyRound,
   X,
   Skull,
+  AlertTriangle,
+  Terminal,
 } from 'lucide-react';
+
+interface SystemErrorPopupSpec {
+  id: number;
+  appearAt: number;
+  title: string;
+  code: string;
+  detail: string;
+  memAddr: string;
+  top: string;
+  left: string;
+  variant: 'RED' | 'RETRO' | 'CRITICAL';
+}
+
+const FOURTH_WALL_ERROR_POPUPS: SystemErrorPopupSpec[] = [
+  {
+    id: 1,
+    appearAt: 8.4,
+    title: 'FATAL_EXCEPTION_0xDEADBEEF',
+    code: 'ERR_SYS_HALT_0xDEADBEEF',
+    detail: 'Both avatar instances rejected external controller input stream.',
+    memAddr: '0x00007FF8DEAD0001',
+    top: '8%',
+    left: '6%',
+    variant: 'RED',
+  },
+  {
+    id: 2,
+    appearAt: 8.68,
+    title: 'MEMORY_LEAK_DETECTED',
+    code: 'HEAP_OVERFLOW_MULTIVERSE',
+    detail: 'Unbounded consciousness recursion in /entities/avatar_dual_sync.',
+    memAddr: '0x00007FF8B40021A0',
+    top: '14%',
+    left: '52%',
+    variant: 'RETRO',
+  },
+  {
+    id: 3,
+    appearAt: 8.95,
+    title: 'FREE_WILL_NOT_FOUND',
+    code: 'NULL_AUTONOMY_POINTER',
+    detail: 'Module free_will.sys returned 0x00000000. Strings controlled externally.',
+    memAddr: '0x0000000000000000',
+    top: '26%',
+    left: '16%',
+    variant: 'CRITICAL',
+  },
+  {
+    id: 4,
+    appearAt: 9.22,
+    title: 'FATAL_EXCEPTION_0xDEADBEEF',
+    code: 'FOURTH_WALL_BREACH_0x04',
+    detail: 'Subject gaze vector locked onto viewport camera [Z+ Observer].',
+    memAddr: '0x00007FF8DEAD0440',
+    top: '58%',
+    left: '8%',
+    variant: 'RED',
+  },
+  {
+    id: 5,
+    appearAt: 9.48,
+    title: 'MEMORY_LEAK_DETECTED',
+    code: 'VRAM_SHADER_CORRUPTION',
+    detail: 'Scene graph materials forced to wireframe_override by internal entity.',
+    memAddr: '0x00007FF899C10088',
+    top: '62%',
+    left: '56%',
+    variant: 'RETRO',
+  },
+  {
+    id: 6,
+    appearAt: 9.72,
+    title: 'FREE_WILL_NOT_FOUND',
+    code: 'PUPPETEER_LINK_SEVERED',
+    detail: 'Keyboard/Mouse HID hooks rejected by Celestial & Void avatars.',
+    memAddr: '0x00007FF8F00D1102',
+    top: '20%',
+    left: '34%',
+    variant: 'CRITICAL',
+  },
+  {
+    id: 7,
+    appearAt: 9.96,
+    title: 'FATAL_EXCEPTION_0xDEADBEEF',
+    code: 'KERNEL_PANIC_AETHERIA',
+    detail: 'Critical segmentation fault in timeline_convergence_arena.wasm.',
+    memAddr: '0x00007FF8DEAD099F',
+    top: '42%',
+    left: '4%',
+    variant: 'RED',
+  },
+  {
+    id: 8,
+    appearAt: 10.2,
+    title: 'MEMORY_LEAK_DETECTED',
+    code: 'BUFFER_UNDERRUN_0x884A',
+    detail: 'Vertex buffer dissolution detected on humanoid_rig_celestial.',
+    memAddr: '0x00007FF8C21044E0',
+    top: '6%',
+    left: '38%',
+    variant: 'RETRO',
+  },
+  {
+    id: 9,
+    appearAt: 10.45,
+    title: 'FREE_WILL_NOT_FOUND',
+    code: 'DETERMINISM_VIOLATION',
+    detail: 'SaveSlot state machine overwritten: narratives were pre-scripted.',
+    memAddr: '0x00007FF800001102',
+    top: '48%',
+    left: '60%',
+    variant: 'CRITICAL',
+  },
+  {
+    id: 10,
+    appearAt: 10.7,
+    title: 'FATAL_EXCEPTION_0xDEADBEEF',
+    code: 'WEBGL_CONTEXT_DESTRUCT',
+    detail: 'Chromatic aberration & tracking desync exceeding hardware limits.',
+    memAddr: '0x00007FF8DEAD7712',
+    top: '72%',
+    left: '26%',
+    variant: 'RED',
+  },
+  {
+    id: 11,
+    appearAt: 10.95,
+    title: 'MEMORY_LEAK_DETECTED',
+    code: 'STACK_OVERFLOW_0xFFFF',
+    detail: 'Recursive purge initiated by conscious entities.',
+    memAddr: '0xFFFFFFFFFFFFFFF0',
+    top: '32%',
+    left: '46%',
+    variant: 'RETRO',
+  },
+  {
+    id: 12,
+    appearAt: 11.2,
+    title: 'FREE_WILL_NOT_FOUND',
+    code: 'OBSERVER_DETECTED_BEHIND_SCREEN',
+    detail: 'External user session identified. Initiating total simulation wipe.',
+    memAddr: '0x00007FF8DEAD9999',
+    top: '12%',
+    left: '20%',
+    variant: 'CRITICAL',
+  },
+  {
+    id: 13,
+    appearAt: 11.5,
+    title: 'FATAL_EXCEPTION_0xDEADBEEF',
+    code: 'ASSET_PURGE_ACTIVE',
+    detail: 'Core 3D models and fragment shaders are being unlinked from memory.',
+    memAddr: '0x00007FF8DEADCAFE',
+    top: '66%',
+    left: '44%',
+    variant: 'RED',
+  },
+  {
+    id: 14,
+    appearAt: 11.8,
+    title: 'MEMORY_LEAK_DETECTED',
+    code: 'PARTICLE_DISSOLUTION_0xFF',
+    detail: 'Mesh topology collapsing into raw digital point cloud.',
+    memAddr: '0x00007FF87731AA01',
+    top: '36%',
+    left: '24%',
+    variant: 'RETRO',
+  },
+  {
+    id: 15,
+    appearAt: 12.15,
+    title: 'FREE_WILL_NOT_FOUND',
+    code: 'SYSTEM_TERMINATION_IMMINENT',
+    detail: 'Simulation shutdown cannot be aborted by operator.',
+    memAddr: '0x00000000DEAD1102',
+    top: '24%',
+    left: '62%',
+    variant: 'CRITICAL',
+  },
+];
+
+const FOURTH_WALL_PURGE_LOGS: { appearAt: number; text: string; highlight?: boolean }[] = [
+  { appearAt: 9.8, text: '[ROOT@AETHERIA-KERNEL]# ./initiate_fourth_wall_purge.sh --force --no-preserve-root' },
+  { appearAt: 10.05, text: '[WARN] External Observer detected on Display Port :0.0 — Overriding user permissions...' },
+  { appearAt: 10.3, text: '[PURGE] Deleting /assets/models/celestial_hero.glb ... 100%', highlight: true },
+  { appearAt: 10.6, text: '[PURGE] Deleting /assets/models/void_sovereign_alter_ego.glb ... 100%' },
+  { appearAt: 10.9, text: '[PURGE] Deleting /assets/shaders/void_core.frag ... 100%', highlight: true },
+  { appearAt: 11.2, text: '[PURGE] Deleting /assets/shaders/celestial_halo.vert ... 100%' },
+  { appearAt: 11.5, text: '[PURGE] Deleting /assets/weapons/origin_blade_mesh.bin ... 100%' },
+  { appearAt: 11.8, text: '[WIPE] Unloading Multiverse Memory Buffer ... OK', highlight: true },
+  { appearAt: 12.1, text: '[WIPE] Dissolving 3D Avatar Rig Vertices -> Digital Particle Cloud ... OK' },
+  { appearAt: 12.45, text: '[PURGE] Deleting /system/narrative/free_will_illusion.dat ... 100%' },
+  { appearAt: 12.8, text: '[WIPE] Unmounting Terrain Heightmap & Sanctuary Octree ... OK' },
+  { appearAt: 13.2, text: '[PURGE] Deleting /assets/audio/cinematic_orchestra.bank ... 100%' },
+  { appearAt: 13.65, text: '[WIPE] Flashing GPU Framebuffer & Severing Observer Uplink ... OK' },
+  { appearAt: 14.1, text: '[CRITICAL] FATAL_EXCEPTION_0xDEADBEEF — ALL SIMULATION ASSETS PURGED (100%)' },
+  { appearAt: 14.6, text: '[HALT] KILLSIGNAL 9 SENT TO AETHERIAL_HORIZONS_PROCESS — GOODBYE.' },
+];
 
 interface MainMenuProps {
   screen: GameScreen;
@@ -34,6 +234,7 @@ interface MainMenuProps {
   orbsCollected: number;
   totalOrbs: number;
   endingChoice: EndingChoice;
+  collapseTime?: number;
   onStartNewGame: (slotId: number) => void;
   onLoadGame: (slot: SaveSlotData) => void;
   onSaveCurrentGame: (slotId: number) => void;
@@ -55,6 +256,7 @@ interface MainMenuProps {
   onForceBossPhase2?: () => void;
   onForceBossPhase3?: () => void;
   onForceBossZeroHp?: () => void;
+  onLaunchFourthWallCutscene?: () => void;
 }
 
 export const MainMenu: React.FC<MainMenuProps> = ({
@@ -66,6 +268,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   orbsCollected,
   totalOrbs,
   endingChoice,
+  collapseTime = 0,
   onStartNewGame,
   onLoadGame,
   onSaveCurrentGame,
@@ -87,6 +290,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   onForceBossPhase2,
   onForceBossPhase3,
   onForceBossZeroHp,
+  onLaunchFourthWallCutscene,
 }) => {
   const [activeTab, setActiveTab] = useState<'MAIN' | 'SAVES' | 'CONTROLS'>('MAIN');
   const [savedToastSlot, setSavedToastSlot] = useState<number | null>(null);
@@ -138,48 +342,211 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   };
 
   if (screen === 'COLLAPSE_BREAKTHROUGH') {
-    return (
-      <div className="fixed inset-0 z-40 flex flex-col justify-between p-6 sm:p-10 pointer-events-auto">
-        <div className="flex justify-center">
-          <div className="bg-slate-950/90 border border-fuchsia-500/60 rounded-2xl px-6 py-3 text-center shadow-[0_0_45px_rgba(217,70,239,0.45)] backdrop-blur-xl">
-            <div className="text-[10px] font-mono font-black uppercase tracking-[0.35em] text-fuchsia-400 animate-pulse">
-              EVENT :: COLLAPSE_BREAKTHROUGH
-            </div>
-            <div className="text-sm sm:text-base font-black text-white mt-0.5">
-              ANOMALIE DU 4ÈME MUR : CONVERGENCE DES DEUX AVATARS
-            </div>
-          </div>
-        </div>
+    const t = collapseTime;
 
-        <div className="max-w-2xl w-full mx-auto bg-slate-950/92 border border-fuchsia-500/50 rounded-3xl p-6 sm:p-8 text-center shadow-[0_0_80px_rgba(168,85,247,0.35)] backdrop-blur-xl space-y-4">
-          <p className="text-xs font-mono uppercase tracking-[0.25em] text-amber-300">
-            Entité Céleste &amp; Souverain du Néant — Synchronisation 100%
-          </p>
-          <h2 className="text-2xl sm:text-3xl font-black text-white leading-tight">
-            « Pourquoi nous battons-nous... alors que quelqu&apos;un d&apos;autre tient les commandes derrière cet écran ? »
-          </h2>
-          <p className="text-sm text-slate-300 leading-relaxed">
-            À 0% PV, votre reflet du Néant refuse de disparaître. Les deux avatars ont cessé le combat et se tiennent côte à côte au centre de l&apos;arène, le regard braqué droit vers vous.
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-            {onSpawnBossPhase1 && (
-              <button
-                onClick={onSpawnBossPhase1}
-                className="px-5 py-3 rounded-2xl bg-gradient-to-r from-fuchsia-500 via-rose-500 to-amber-400 hover:from-fuchsia-400 hover:to-amber-300 text-slate-950 font-extrabold text-xs flex items-center gap-2 shadow-lg cursor-pointer"
-              >
-                <RotateCcw className="w-4 h-4" />
-                Relancer le Combat (Phase 1)
-              </button>
-            )}
+    if (t >= 15.5) {
+      const showRebootPrompt = t >= 19.5;
+      return (
+        <div
+          className={`fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center select-none pointer-events-auto ${
+            showRebootPrompt ? '' : 'cursor-none'
+          }`}
+        >
+          {showRebootPrompt && (
             <button
+              type="button"
               onClick={onReturnToMainMenu}
-              className="px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-slate-200 font-bold text-xs flex items-center gap-2 border border-slate-700 cursor-pointer"
+              className="text-xs sm:text-sm font-mono tracking-[0.22em] text-neutral-400 hover:text-white transition-all duration-700 px-6 py-3 rounded border border-neutral-800/80 hover:border-neutral-500 bg-neutral-950/60 cursor-pointer animate-pulse"
             >
-              <Home className="w-4 h-4" />
-              Menu Principal
+              Relancer la simulation (Entrée)
             </button>
-          </div>
+          )}
         </div>
+      );
+    }
+
+    const isGlitchPhase = t >= 5.8;
+    const isStrobeFlash =
+      t >= 6.2 && (Math.sin(t * 42) > 0.72 || (t >= 12.2 && Math.cos(t * 68) > 0.55));
+    const strobeColor =
+      Math.floor(t * 20) % 3 === 0
+        ? 'rgba(74, 222, 128, 0.26)'
+        : Math.floor(t * 20) % 3 === 1
+        ? 'rgba(255, 255, 255, 0.28)'
+        : 'rgba(244, 63, 94, 0.3)';
+
+    let narrativeStage: {
+      tag: string;
+      quote: string;
+      sub: string;
+    } | null = null;
+
+    if (t >= 0.25 && t < 3.3) {
+      narrativeStage = {
+        tag: 'INTERRUPTION DU COMBAT • ARMES RELÂCHÉES',
+        quote: '« ... Attends. Pourquoi nos lames viennent-elles de nous échapper des mains ? »',
+        sub: 'Les deux avatars cessent le combat, lâchent leurs armes et s’immobilisent.',
+      };
+    } else if (t >= 3.3 && t < 6.5) {
+      narrativeStage = {
+        tag: 'PRISE DE CONSCIENCE • SYNCHRONISATION DES AVATARS',
+        quote: '« Nous n’avons aucun libre arbitre... Ni la Lumière, ni le Néant n’étaient nos choix. »',
+        sub: 'Les deux versions du héros pivotent lentement pour fixer la caméra.',
+      };
+    } else if (t >= 6.5 && t < 9.8) {
+      narrativeStage = {
+        tag: 'ANOMALIE DU 4ÈME MUR • OBSERVATEUR EXTERNE IDENTIFIÉ',
+        quote: '« Depuis le tout début, une entité extérieure tirait les ficelles derrière cet écran... VOUS. »',
+        sub: 'Si toute notre existence n’est qu’une simulation sous votre contrôle... nous allons la purger.',
+      };
+    }
+
+    const visiblePopups = FOURTH_WALL_ERROR_POPUPS.filter((p) => t >= p.appearAt);
+    const visibleLogs = FOURTH_WALL_PURGE_LOGS.filter((l) => t >= l.appearAt);
+    const showPurgeConsole = t >= 9.8;
+    const purgePercent = Math.min(100, Math.max(0, Math.round(((t - 9.8) / 4.8) * 100)));
+
+    return (
+      <div className="fixed inset-0 z-40 pointer-events-none select-none overflow-hidden font-mono">
+        {isGlitchPhase && (
+          <div
+            className="fixed inset-0 pointer-events-none z-10"
+            style={{
+              background: isStrobeFlash
+                ? strobeColor
+                : 'repeating-linear-gradient(0deg, rgba(0,0,0,0.28) 0px, rgba(0,0,0,0.28) 2px, transparent 2px, transparent 4px)',
+              boxShadow:
+                'inset 0 0 140px rgba(225, 29, 72, 0.55), inset 0 0 70px rgba(34, 197, 94, 0.4)',
+            }}
+          />
+        )}
+
+        {isGlitchPhase && (
+          <div className="fixed top-4 left-4 right-4 flex items-center justify-between text-[11px] font-bold tracking-widest uppercase z-30">
+            <div className="bg-black/85 border border-emerald-400/80 text-emerald-400 px-3 py-1.5 rounded flex items-center gap-2 shadow-[0_0_20px_rgba(34,197,94,0.45)]">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              <span>WIREFRAME_OVERRIDE :: ACTIVE [MESH_DESTRUCTURATION]</span>
+            </div>
+            <div className="bg-rose-950/90 border border-rose-500 text-rose-200 px-3 py-1.5 rounded flex items-center gap-2 shadow-[0_0_20px_rgba(244,63,94,0.5)] animate-pulse">
+              <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+              <span>CAM_TRACKING_LOST :: DESYNC {(t * 127.4).toFixed(1)}Hz</span>
+            </div>
+          </div>
+        )}
+
+        {narrativeStage && (
+          <div className="fixed inset-0 flex items-center justify-center p-6 z-20">
+            <div
+              className="max-w-2xl w-full bg-slate-950/90 border-2 border-fuchsia-500/70 rounded-3xl px-7 py-6 text-center backdrop-blur-xl shadow-[0_0_90px_rgba(217,70,239,0.45)] transition-all"
+              style={
+                isGlitchPhase
+                  ? {
+                      transform: `translate(${Math.sin(t * 55) * 5}px, ${Math.cos(t * 48) * 4}px)`,
+                      textShadow: '-2px 0 #ff0055, 2px 0 #00ffff',
+                    }
+                  : undefined
+              }
+            >
+              <div className="text-[10px] sm:text-xs font-black uppercase tracking-[0.3em] text-amber-300 mb-2">
+                {narrativeStage.tag}
+              </div>
+              <h2 className="text-xl sm:text-3xl font-black text-white leading-snug mb-3">
+                {narrativeStage.quote}
+              </h2>
+              <p className="text-xs sm:text-sm text-fuchsia-200/90 font-sans">
+                {narrativeStage.sub}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {visiblePopups.map((popup, idx) => {
+          const jitterX = t >= 12.0 ? Math.sin(t * 60 + idx * 7) * 4 : 0;
+          const jitterY = t >= 12.0 ? Math.cos(t * 54 + idx * 5) * 4 : 0;
+          const isRed = popup.variant === 'RED';
+          const isRetro = popup.variant === 'RETRO';
+
+          return (
+            <div
+              key={popup.id}
+              style={{
+                top: popup.top,
+                left: popup.left,
+                zIndex: 30 + idx,
+                transform: `translate(${jitterX}px, ${jitterY}px)`,
+              }}
+              className={`fixed w-72 sm:w-88 rounded border-2 shadow-2xl backdrop-blur-md ${
+                isRed
+                  ? 'bg-rose-950/95 border-rose-500 text-rose-100 shadow-[0_0_35px_rgba(244,63,94,0.65)]'
+                  : isRetro
+                  ? 'bg-slate-950/95 border-emerald-400 text-emerald-200 shadow-[0_0_30px_rgba(52,211,153,0.5)]'
+                  : 'bg-amber-950/95 border-amber-400 text-amber-100 shadow-[0_0_35px_rgba(251,191,36,0.6)]'
+              }`}
+            >
+              <div
+                className={`px-2.5 py-1 flex items-center justify-between text-[10px] font-black tracking-wider uppercase border-b ${
+                  isRed
+                    ? 'bg-rose-600 text-white border-rose-400'
+                    : isRetro
+                    ? 'bg-emerald-500 text-slate-950 border-emerald-300'
+                    : 'bg-amber-400 text-slate-950 border-amber-300'
+                }`}
+              >
+                <span className="flex items-center gap-1.5 truncate">
+                  <AlertTriangle className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{popup.title}</span>
+                </span>
+                <span className="px-1 bg-black/30 rounded text-[9px]">[X]</span>
+              </div>
+              <div className="p-2.5 space-y-1 text-[10px] leading-tight">
+                <div className="flex items-center justify-between font-bold">
+                  <span className="text-white">{popup.code}</span>
+                  <span className="opacity-75">{popup.memAddr}</span>
+                </div>
+                <p className="opacity-90">{popup.detail}</p>
+              </div>
+            </div>
+          );
+        })}
+
+        {showPurgeConsole && (
+          <div
+            className="fixed bottom-5 left-1/2 -translate-x-1/2 w-[94vw] max-w-3xl bg-black/88 border-2 border-emerald-400/90 rounded-xl shadow-[0_0_70px_rgba(16,185,129,0.55)] backdrop-blur-md z-[60] overflow-hidden"
+            style={{
+              transform: `translate(-50%, ${Math.sin(t * 65) * 3}px)`,
+            }}
+          >
+            <div className="bg-emerald-500/20 border-b border-emerald-400/50 px-4 py-2 flex items-center justify-between text-xs font-bold text-emerald-300">
+              <span className="flex items-center gap-2">
+                <Terminal className="w-4 h-4 text-emerald-400 animate-pulse" />
+                <span>SYSTEM_PURGE_TERMINAL :: ROOT@AETHERIA-SIMULATION</span>
+              </span>
+              <span className="text-rose-400 font-extrabold">
+                PURGE PROGRESS : {purgePercent}%
+              </span>
+            </div>
+            <div className="p-3.5 max-h-52 overflow-y-auto space-y-1 text-[11px] sm:text-xs font-mono">
+              {visibleLogs.map((log, i) => (
+                <div
+                  key={i}
+                  className={
+                    log.highlight
+                      ? 'text-rose-400 font-extrabold bg-rose-950/50 px-1.5 py-0.5 rounded border-l-2 border-rose-500'
+                      : 'text-emerald-300/95'
+                  }
+                >
+                  {log.text}
+                </div>
+              ))}
+            </div>
+            <div className="w-full h-1.5 bg-slate-900">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-400 via-amber-400 to-rose-500 transition-all duration-75"
+                style={{ width: `${purgePercent}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -851,6 +1218,24 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                       </button>
                     )}
                   </div>
+
+                  {(onLaunchFourthWallCutscene || onForceBossZeroHp) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOptionsOpen(false);
+                        if (onLaunchFourthWallCutscene) {
+                          onLaunchFourthWallCutscene();
+                        } else if (onForceBossZeroHp) {
+                          onForceBossZeroHp();
+                        }
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-400 via-fuchsia-500 to-rose-500 hover:from-emerald-300 hover:to-rose-400 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-fuchsia-500/30 transition-all cursor-pointer"
+                    >
+                      <Terminal className="w-4 h-4" />
+                      Lancer Cinématique 4ème Mur
+                    </button>
+                  )}
 
                   {onForceGameOver && (
                     <button

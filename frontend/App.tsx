@@ -19,6 +19,7 @@ import {
 import {
   createHumanoidCharacter,
   createFirstPersonViewModel,
+  buildDetailedSwordMesh,
   HumanoidCharacter,
 } from './utils/playerModel';
 import {
@@ -187,6 +188,7 @@ export function App() {
 
   const [cutsceneStep, setCutsceneStep] = useState(0);
   const [cutsceneProgress, setCutsceneProgress] = useState(0);
+  const [collapseTime, setCollapseTime] = useState(0);
   const [endingChoice, setEndingChoice] = useState<EndingChoice>('NONE');
   const [progressionState, setProgressionState] = useState(() =>
     SaveManager.getState()
@@ -310,6 +312,15 @@ export function App() {
     skyPillarMesh: null as THREE.Mesh | null,
     restoredHeartMesh: null as THREE.Mesh | null,
     crownGroupMesh: null as THREE.Group | null,
+    droppedWeaponsGroup: null as THREE.Group | null,
+    dissolutionParticlesGroup: null as THREE.Points | null,
+    resetSceneWireframe: null as (() => void) | null,
+    collapseTimer: 0,
+    collapseWeaponDropPlayed: false,
+    collapseCrashSoundPlayed: false,
+    collapseSilenced: false,
+    collapsePopupSoundCount: 0,
+    collapseGlitchSoundTimer: 0,
     cutsceneStepTimer: 0,
     cutsceneStepIndex: 0,
     isFadingTransition: false,
@@ -790,39 +801,75 @@ export function App() {
     const st = gameRef.current;
     exitLockSafe();
 
+    if (st.resetSceneWireframe) {
+      st.resetSceneWireframe();
+    }
+
     const cY = getTerrainHeight(0, 0);
     st.keys = {};
     st.isDrawingBow = false;
     st.bowDrawProgress = 0;
     st.attackTimer = 0;
     st.playerVel.set(0, 0, 0);
-    st.playerPos.set(-1.4, cY + 1.2, 0);
-    st.yaw = Math.PI;
+    st.playerPos.set(-1.25, cY + 1.2, 0);
+    st.yaw = -Math.PI / 2;
     st.pitch = 0;
+    st.endingChoice = 'SAVE_WORLD';
     st.isDimensionalClashActive = true;
     st.alterEgoPhase = 3;
+    st.collapseTimer = 0;
+    st.collapseWeaponDropPlayed = false;
+    st.collapseCrashSoundPlayed = false;
+    st.collapseSilenced = false;
+    st.collapsePopupSoundCount = 0;
+    st.collapseGlitchSoundTimer = 0;
+
+    if (st.sceneRef) {
+      st.visualEffects.forEach((fx) => st.sceneRef?.remove(fx.mesh));
+    }
     st.visualEffects = [];
 
     if (st.bossInstance) {
       st.bossInstance.hp = 0;
       st.bossInstance.active = false;
       st.bossInstance.defeated = false;
-      st.bossInstance.position.set(1.4, cY, 0);
-      st.bossInstance.group.position.set(1.4, cY, 0);
+      st.bossInstance.position.set(1.25, cY, 0);
+      st.bossInstance.group.position.set(1.25, cY, 0);
       st.bossInstance.group.visible = false;
+    }
+
+    if (st.sovereignThrone) {
+      st.sovereignThrone.group.visible = true;
+      st.sovereignThrone.group.position.set(0, cY, 0);
+    }
+
+    if (st.finaleMonumentGroup) {
+      st.finaleMonumentGroup.visible = true;
     }
 
     if (st.alterEgoHumanoid) {
       st.alterEgoHumanoid.group.visible = true;
-      st.alterEgoHumanoid.group.position.set(1.4, cY, 0);
-      st.alterEgoHumanoid.group.rotation.set(0, Math.PI, 0);
-      st.alterEgoHumanoid.group.scale.set(1.4, 1.4, 1.4);
+      st.alterEgoHumanoid.group.position.set(1.25, cY, 0);
+      st.alterEgoHumanoid.group.rotation.set(0, Math.PI / 2, 0);
+      st.alterEgoHumanoid.group.scale.set(1.08, 1.08, 1.08);
+    }
+
+    if (st.droppedWeaponsGroup) {
+      st.droppedWeaponsGroup.visible = true;
+    }
+
+    if (st.dissolutionParticlesGroup) {
+      st.dissolutionParticlesGroup.visible = false;
     }
 
     st.enemyInstances.forEach((enemy) => {
       enemy.alive = false;
       enemy.group.visible = false;
     });
+
+    setEndingChoice('SAVE_WORLD');
+    setCollapseTime(0);
+    setRecentCollectName(null);
 
     setWorldState((prev) => ({
       ...prev,
@@ -841,9 +888,8 @@ export function App() {
     soundFX.init();
     soundFX.playVoidDimensionSeal();
     soundFX.playCinematicChord(2, true);
-    showToast('COLLAPSE_BREAKTHROUGH : Les deux avatars refusent de disparaître et brisent le 4ème mur !');
     updateScreen('COLLAPSE_BREAKTHROUGH');
-  }, [exitLockSafe, showToast, updateScreen]);
+  }, [exitLockSafe, updateScreen]);
 
   const setupAlterEgoArena = useCallback(
     (targetPhase: 1 | 2 | 3) => {
@@ -1617,11 +1663,33 @@ export function App() {
   }, [exitLockSafe, updateScreen]);
 
   const handleReturnToMainMenu = useCallback(() => {
-    performSave(gameRef.current.activeSlot);
+    const st = gameRef.current;
+    if (st.resetSceneWireframe) {
+      st.resetSceneWireframe();
+    }
+    if (st.droppedWeaponsGroup) {
+      st.droppedWeaponsGroup.visible = false;
+    }
+    if (st.dissolutionParticlesGroup) {
+      st.dissolutionParticlesGroup.visible = false;
+    }
+    if (st.alterEgoHumanoid) {
+      st.alterEgoHumanoid.group.visible = false;
+    }
+    if (st.cameraRef) {
+      st.cameraRef.fov = 70;
+      st.cameraRef.up.set(0, 1, 0);
+      st.cameraRef.updateProjectionMatrix();
+    }
+    st.collapseTimer = 0;
+    st.collapseSilenced = false;
+    setCollapseTime(0);
+    soundFX.init();
+    performSave(st.activeSlot);
     exitLockSafe();
-    gameRef.current.keys = {};
-    gameRef.current.isDrawingBow = false;
-    gameRef.current.bowDrawProgress = 0;
+    st.keys = {};
+    st.isDrawingBow = false;
+    st.bowDrawProgress = 0;
     updateScreen('MAIN_MENU');
   }, [exitLockSafe, performSave, updateScreen]);
 
@@ -2517,6 +2585,152 @@ export function App() {
     scene.add(alterEgo.group);
     gameRef.current.alterEgoHumanoid = alterEgo;
 
+    const droppedWeaponsGroup = new THREE.Group();
+    droppedWeaponsGroup.visible = false;
+    const droppedCelestialSword = buildDetailedSwordMesh();
+    droppedCelestialSword.setCorruptedMode(false, true, 0);
+    const droppedVoidSword = buildDetailedSwordMesh();
+    droppedVoidSword.setCorruptedMode(true, false, 0);
+    droppedWeaponsGroup.add(droppedCelestialSword.swordRoot);
+    droppedWeaponsGroup.add(droppedVoidSword.swordRoot);
+    scene.add(droppedWeaponsGroup);
+    gameRef.current.droppedWeaponsGroup = droppedWeaponsGroup;
+
+    const dissolveCount = 720;
+    const dissolveBasePositions = new Float32Array(dissolveCount * 3);
+    const dissolveVelocities = new Float32Array(dissolveCount * 3);
+    const dissolveLivePositions = new Float32Array(dissolveCount * 3);
+    const dissolveColors = new Float32Array(dissolveCount * 3);
+    for (let i = 0; i < dissolveCount; i++) {
+      const isRightAvatar = i >= dissolveCount / 2;
+      const baseX = (isRightAvatar ? 1.25 : -1.25) + (Math.random() - 0.5) * 0.7;
+      const baseY = 0.1 + Math.random() * 1.95;
+      const baseZ = (Math.random() - 0.5) * 0.55;
+      dissolveBasePositions[i * 3] = baseX;
+      dissolveBasePositions[i * 3 + 1] = baseY;
+      dissolveBasePositions[i * 3 + 2] = baseZ;
+      dissolveLivePositions[i * 3] = baseX;
+      dissolveLivePositions[i * 3 + 1] = centerGroundY + baseY;
+      dissolveLivePositions[i * 3 + 2] = baseZ;
+
+      const angle = Math.random() * Math.PI * 2;
+      const radialSpeed = 0.8 + Math.random() * 3.8;
+      dissolveVelocities[i * 3] = Math.cos(angle) * radialSpeed;
+      dissolveVelocities[i * 3 + 1] = 1.2 + Math.random() * 4.5;
+      dissolveVelocities[i * 3 + 2] = Math.sin(angle) * radialSpeed;
+
+      if (i % 4 === 0) {
+        dissolveColors[i * 3] = 0.29;
+        dissolveColors[i * 3 + 1] = 0.87;
+        dissolveColors[i * 3 + 2] = 0.5;
+      } else if (isRightAvatar) {
+        dissolveColors[i * 3] = 0.95;
+        dissolveColors[i * 3 + 1] = 0.24;
+        dissolveColors[i * 3 + 2] = 0.58;
+      } else {
+        dissolveColors[i * 3] = 1.0;
+        dissolveColors[i * 3 + 1] = 0.95;
+        dissolveColors[i * 3 + 2] = 0.55;
+      }
+    }
+    const dissolveGeo = new THREE.BufferGeometry();
+    dissolveGeo.setAttribute(
+      'position',
+      new THREE.BufferAttribute(dissolveLivePositions, 3)
+    );
+    dissolveGeo.setAttribute(
+      'color',
+      new THREE.BufferAttribute(dissolveColors, 3)
+    );
+    const dissolveMat = new THREE.PointsMaterial({
+      size: 0.14,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.95,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const dissolutionParticles = new THREE.Points(dissolveGeo, dissolveMat);
+    dissolutionParticles.visible = false;
+    scene.add(dissolutionParticles);
+    gameRef.current.dissolutionParticlesGroup = dissolutionParticles;
+
+    const savedMaterialsMap = new Map<
+      THREE.Material,
+      {
+        wireframe: boolean;
+        colorHex?: number;
+        emissiveHex?: number;
+        emissiveIntensity?: number;
+      }
+    >();
+    let isSceneWireframeActive = false;
+
+    const setSceneWireframeMode = (active: boolean, phaseSeed = 0) => {
+      if (!active && !isSceneWireframeActive) return;
+      if (!active) {
+        savedMaterialsMap.forEach((orig, mat) => {
+          const m = mat as THREE.MeshStandardMaterial & THREE.MeshBasicMaterial;
+          m.wireframe = orig.wireframe;
+          if (orig.colorHex !== undefined && m.color) {
+            m.color.setHex(orig.colorHex);
+          }
+          if (orig.emissiveHex !== undefined && m.emissive) {
+            m.emissive.setHex(orig.emissiveHex);
+          }
+          if (
+            orig.emissiveIntensity !== undefined &&
+            typeof m.emissiveIntensity === 'number'
+          ) {
+            m.emissiveIntensity = orig.emissiveIntensity;
+          }
+        });
+        savedMaterialsMap.clear();
+        isSceneWireframeActive = false;
+        return;
+      }
+
+      isSceneWireframeActive = true;
+      let meshIdx = 0;
+      scene.traverse((obj) => {
+        if ((obj as THREE.Mesh).isMesh) {
+          const mesh = obj as THREE.Mesh;
+          const mats = Array.isArray(mesh.material)
+            ? mesh.material
+            : [mesh.material];
+          mats.forEach((mat) => {
+            if (!mat) return;
+            const m = mat as THREE.MeshStandardMaterial & THREE.MeshBasicMaterial;
+            if (typeof m.wireframe !== 'boolean') return;
+            if (!savedMaterialsMap.has(mat)) {
+              savedMaterialsMap.set(mat, {
+                wireframe: m.wireframe,
+                colorHex: m.color ? m.color.getHex() : undefined,
+                emissiveHex: m.emissive ? m.emissive.getHex() : undefined,
+                emissiveIntensity:
+                  typeof m.emissiveIntensity === 'number'
+                    ? m.emissiveIntensity
+                    : undefined,
+              });
+            }
+            m.wireframe = true;
+            const useWhite = (meshIdx + Math.floor(phaseSeed * 10)) % 3 === 0;
+            const targetHex = useWhite ? 0xffffff : 0x4ade80;
+            if (m.color) {
+              m.color.setHex(targetHex);
+            }
+            if (m.emissive) {
+              m.emissive.setHex(useWhite ? 0xffffff : 0x22c55e);
+              m.emissiveIntensity = 1.45;
+            }
+            meshIdx++;
+          });
+        }
+      });
+    };
+
+    gameRef.current.resetSceneWireframe = () => setSceneWireframeMode(false);
+
     // ============================================================================
     // 5. ORBES & MONUMENT DE CONVERGENCE FINALE
     // ============================================================================
@@ -2877,6 +3091,17 @@ export function App() {
           handlePrevCutsceneStep();
         } else if (e.code === 'Escape') {
           finishCutscene();
+        }
+        return;
+      }
+
+      if (scr === 'COLLAPSE_BREAKTHROUGH') {
+        if (
+          (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Space') &&
+          gameRef.current.collapseTimer >= 19.5
+        ) {
+          e.preventDefault();
+          handleReturnToMainMenu();
         }
         return;
       }
@@ -3443,6 +3668,7 @@ export function App() {
         fog.density = 0.0024;
         const spawnGroundY = getTerrainHeight(0, 0);
         playerGroup.position.set(0, spawnGroundY, 0);
+        playerGroup.scale.set(1, 1, 1);
         playerGroup.visible = true;
         humanoid.updateAnimation({
           dt,
@@ -4031,20 +4257,143 @@ export function App() {
       }
 
       if (state.screen === 'COLLAPSE_BREAKTHROUGH') {
-        playerGroup.visible = true;
+        state.collapseTimer += dt;
+        const t = state.collapseTimer;
+
+        hudSyncTimer += dt;
+        if (hudSyncTimer >= 0.033 || (t >= 15.5 && t < 15.6) || (t >= 19.5 && t < 19.6)) {
+          hudSyncTimer = 0;
+          setCollapseTime(t);
+        }
+
+        if (t >= 15.5) {
+          if (!state.collapseSilenced) {
+            state.collapseSilenced = true;
+            soundFX.silenceAll();
+            setSceneWireframeMode(false);
+            playerGroup.scale.set(1, 1, 1);
+            playerGroup.visible = false;
+            alterEgo.group.visible = false;
+            droppedWeaponsGroup.visible = false;
+            dissolutionParticles.visible = false;
+            camera.fov = 70;
+            camera.up.set(0, 1, 0);
+            camera.updateProjectionMatrix();
+          }
+          renderer.render(scene, camera);
+          return;
+        }
+
+        if (t >= 0.42 && !state.collapseWeaponDropPlayed) {
+          state.collapseWeaponDropPlayed = true;
+          soundFX.playWeaponDrop();
+        }
+
+        if (t >= 5.8 && t < 14.8) {
+          state.collapseGlitchSoundTimer += dt;
+          const glitchInterval = t >= 10.0 ? 0.19 : 0.34;
+          if (state.collapseGlitchSoundTimer >= glitchInterval) {
+            state.collapseGlitchSoundTimer = 0;
+            soundFX.playGlitchBurst(t >= 10.0 ? 1.35 : 0.85);
+          }
+        }
+
+        if (t >= 8.4 && t < 14.8) {
+          const expectedPopups = Math.min(
+            15,
+            Math.floor((t - 8.4) / 0.26) + 1
+          );
+          if (expectedPopups > state.collapsePopupSoundCount) {
+            state.collapsePopupSoundCount = expectedPopups;
+            soundFX.playErrorPopupBeep(expectedPopups);
+          }
+        }
+
+        if (t >= 14.82 && !state.collapseCrashSoundPlayed) {
+          state.collapseCrashSoundPlayed = true;
+          soundFX.playPiercingGlitchCrash();
+        }
+
         fpViewModel.group.visible = false;
-        alterEgo.group.visible = true;
-        alterEgo.group.scale.set(1.4, 1.4, 1.4);
         if (state.bossInstance) {
           state.bossInstance.group.visible = false;
         }
 
         const cY = getTerrainHeight(0, 0);
-        playerGroup.position.set(-1.4, cY + 1.2, 0);
-        playerGroup.rotation.set(0, Math.PI, 0);
 
-        alterEgo.group.position.set(1.4, cY, 0);
-        alterEgo.group.rotation.set(0, Math.PI, 0);
+        const dropProgress = Math.max(0, Math.min(1, t / 0.72));
+        const dropBounce =
+          dropProgress < 0.8
+            ? 1 - (dropProgress / 0.8) * (dropProgress / 0.8)
+            : Math.sin(((dropProgress - 0.8) / 0.2) * Math.PI) * 0.08;
+        const swordY = cY + 0.08 + dropBounce * 0.95;
+
+        droppedWeaponsGroup.visible = t < 14.6;
+        droppedCelestialSword.setCorruptedMode(false, true, now * 0.001);
+        droppedVoidSword.setCorruptedMode(true, false, now * 0.001);
+
+        droppedCelestialSword.swordRoot.position.set(-0.92, swordY, 0.55);
+        droppedCelestialSword.swordRoot.rotation.set(
+          Math.PI / 2,
+          0.35,
+          -0.4 + dropProgress * 1.85
+        );
+
+        droppedVoidSword.swordRoot.position.set(0.92, swordY, 0.55);
+        droppedVoidSword.swordRoot.rotation.set(
+          Math.PI / 2,
+          -0.35,
+          0.4 - dropProgress * 1.85
+        );
+
+        const turnProgress = Math.max(0, Math.min(1, (t - 0.8) / 2.8));
+        const smoothTurn =
+          turnProgress * turnProgress * (3 - 2 * turnProgress);
+
+        const leftYaw = THREE.MathUtils.lerp(
+          -Math.PI / 2,
+          Math.PI - 0.16,
+          smoothTurn
+        );
+        const rightYaw = THREE.MathUtils.lerp(
+          Math.PI / 2,
+          Math.PI + 0.16,
+          smoothTurn
+        );
+
+        const dissolveP = t >= 11.8 ? Math.max(0, Math.min(1, (t - 11.8) / 3.1)) : 0;
+        const avatarRemain = Math.max(0.001, 1 - dissolveP * 1.12);
+        const glitchLevel =
+          t < 5.8
+            ? 0.08
+            : Math.min(2.2, 0.35 + ((t - 5.8) / 8.0) * 1.85);
+
+        const jitterLeftX =
+          t >= 5.8 ? Math.sin(now * 0.065) * 0.12 * glitchLevel : 0;
+        const jitterRightX =
+          t >= 5.8 ? Math.cos(now * 0.072) * 0.12 * glitchLevel : 0;
+        const collapseYOffset = dissolveP * 0.45;
+
+        playerGroup.visible = avatarRemain > 0.02;
+        playerGroup.position.set(-1.25 + jitterLeftX, cY + collapseYOffset, 0);
+        playerGroup.rotation.set(0, leftYaw, 0);
+        playerGroup.scale.set(
+          avatarRemain,
+          avatarRemain * (1 + dissolveP * 0.6),
+          avatarRemain
+        );
+
+        alterEgo.group.visible = avatarRemain > 0.02;
+        alterEgo.group.position.set(1.25 + jitterRightX, cY + collapseYOffset, 0);
+        alterEgo.group.rotation.set(0, rightYaw, 0);
+        const alterBaseScale = 1.08 * avatarRemain;
+        alterEgo.group.scale.set(
+          alterBaseScale,
+          alterBaseScale * (1 + dissolveP * 0.6),
+          alterBaseScale
+        );
+
+        const gazePitch = smoothTurn * 0.06;
 
         humanoid.updateAnimation({
           dt,
@@ -4055,7 +4404,7 @@ export function App() {
           isSprinting: false,
           isGrounded: true,
           isSwimming: false,
-          headPitch: 0,
+          headPitch: gazePitch,
           equippedWeapon: 'SWORD',
           attackProgress: 0,
           bowDrawProgress: 0,
@@ -4064,6 +4413,8 @@ export function App() {
           isSeatedOnThrone: false,
           isCorrupted: false,
           isCelestial: true,
+          glitchIntensity: t >= 5.8 ? glitchLevel * 0.85 : 0,
+          weaponsDropped: true,
         });
 
         alterEgo.updateAnimation({
@@ -4075,7 +4426,7 @@ export function App() {
           isSprinting: false,
           isGrounded: true,
           isSwimming: false,
-          headPitch: 0,
+          headPitch: gazePitch,
           equippedWeapon: 'SWORD',
           attackProgress: 0,
           bowDrawProgress: 0,
@@ -4084,12 +4435,108 @@ export function App() {
           isSeatedOnThrone: false,
           isCorrupted: true,
           isCelestial: false,
-          glitchIntensity: 0.25 + Math.sin(now * 0.003) * 0.15,
+          glitchIntensity: glitchLevel,
+          weaponsDropped: true,
         });
 
-        const camBreathing = Math.sin(now * 0.0015) * 0.12;
-        camera.position.set(0, cY + 2.3 + camBreathing, 6.2);
-        camera.lookAt(0, cY + 1.8, 0);
+        if (t >= 11.8) {
+          dissolutionParticles.visible = true;
+          const posAttr = dissolveGeo.getAttribute(
+            'position'
+          ) as THREE.BufferAttribute;
+          for (let i = 0; i < dissolveCount; i++) {
+            const bx = dissolveBasePositions[i * 3];
+            const by = dissolveBasePositions[i * 3 + 1];
+            const bz = dissolveBasePositions[i * 3 + 2];
+            const vx = dissolveVelocities[i * 3];
+            const vy = dissolveVelocities[i * 3 + 1];
+            const vz = dissolveVelocities[i * 3 + 2];
+            const swirl = dissolveP * 3.8 + i * 0.05;
+            const px =
+              bx +
+              vx * dissolveP * 1.45 +
+              Math.sin(swirl) * 0.45 * dissolveP;
+            const py =
+              cY +
+              by +
+              vy * dissolveP * 1.35 +
+              Math.cos(swirl * 1.3) * 0.25;
+            const pz =
+              bz +
+              vz * dissolveP * 1.45 +
+              Math.cos(swirl) * 0.45 * dissolveP;
+            posAttr.setXYZ(i, px, py, pz);
+          }
+          posAttr.needsUpdate = true;
+          dissolveMat.opacity = Math.max(0.15, 1 - Math.max(0, (t - 14.4) / 1.1));
+        } else {
+          dissolutionParticles.visible = false;
+        }
+
+        const shouldWireframe =
+          t >= 5.8 &&
+          (t >= 8.4 || Math.sin(t * 26) > 0.15);
+        setSceneWireframeMode(shouldWireframe, t);
+
+        if (shouldWireframe) {
+          const strobeBg =
+            Math.sin(t * 42) > 0.72
+              ? new THREE.Color(0x052e16)
+              : new THREE.Color(0x020617);
+          scene.background = strobeBg;
+          fog.color.copy(strobeBg);
+        } else {
+          scene.background = currentSkyColor;
+          fog.color.copy(currentSkyColor);
+        }
+
+        const dollyProgress = Math.min(1, t / 5.5);
+        const baseCamZ = THREE.MathUtils.lerp(5.8, 3.85, dollyProgress);
+        const baseCamY = cY + THREE.MathUtils.lerp(2.15, 1.78, dollyProgress);
+
+        let camJitterX = 0;
+        let camJitterY = Math.sin(now * 0.0018) * 0.06;
+        let camJitterZ = 0;
+        let lookOffsetX = 0;
+        let lookOffsetY = 0;
+
+        if (t >= 5.8) {
+          const trackLoss = Math.min(1.8, (t - 5.8) / 5.5);
+          const slipSpike = Math.sin(t * 19) > 0.78 ? 1.85 : 0.35;
+          camJitterX =
+            Math.sin(now * 0.053) * 0.45 * trackLoss * slipSpike +
+            (Math.random() - 0.5) * 0.22 * trackLoss;
+          camJitterY =
+            Math.cos(now * 0.061) * 0.35 * trackLoss * slipSpike +
+            (Math.random() - 0.5) * 0.18 * trackLoss;
+          camJitterZ = Math.sin(now * 0.039) * 0.4 * trackLoss;
+          lookOffsetX = Math.sin(now * 0.047) * 0.55 * trackLoss * slipSpike;
+          lookOffsetY = Math.cos(now * 0.059) * 0.38 * trackLoss;
+
+          const rollAngle =
+            Math.sin(now * 0.034) * 0.22 * trackLoss +
+            (Math.sin(t * 27) > 0.82 ? 0.32 : 0);
+          camera.up.set(Math.sin(rollAngle), Math.cos(rollAngle), 0);
+
+          camera.fov =
+            70 +
+            Math.sin(now * 0.045) * 14 * trackLoss +
+            (Math.cos(t * 31) > 0.8 ? 14 : 0);
+          camera.updateProjectionMatrix();
+        } else {
+          camera.up.set(0, 1, 0);
+          if (Math.abs(camera.fov - 70) > 0.1) {
+            camera.fov = 70;
+            camera.updateProjectionMatrix();
+          }
+        }
+
+        camera.position.set(
+          camJitterX,
+          baseCamY + camJitterY,
+          baseCamZ + camJitterZ
+        );
+        camera.lookAt(lookOffsetX, cY + 1.52 + lookOffsetY, 0);
 
         renderer.render(scene, camera);
         return;
@@ -4551,6 +4998,7 @@ export function App() {
           state.playerPos.y - eyeOffset,
           state.playerPos.z
         );
+        playerGroup.scale.set(1, 1, 1);
         playerGroup.rotation.y = state.yaw;
         playerGroup.visible = state.cameraMode === 'THIRD_PERSON';
         fpViewModel.group.visible = state.cameraMode === 'FIRST_PERSON';
@@ -5563,12 +6011,14 @@ export function App() {
     handlePrevCutsceneStep,
     handleOpenPauseMenu,
     handleResumeGame,
+    handleReturnToMainMenu,
     handleSelectWeapon,
     handleToggleCamera,
     performSave,
     showToast,
     startOutroCutscene,
     triggerBossIntroWithFade,
+    triggerCollapseBreakthrough,
     triggerGameOver,
     triggerLightningDash,
     triggerSolarNova,
@@ -5590,7 +6040,16 @@ export function App() {
           }
         }}
         style={
-          screen === 'GAME_OVER'
+          screen === 'COLLAPSE_BREAKTHROUGH' && collapseTime >= 5.8 && collapseTime < 15.5
+            ? {
+                filter: `contrast(1.65) saturate(2.1) hue-rotate(${Math.round(
+                  Math.sin(collapseTime * 18) * 65
+                )}deg) drop-shadow(-6px 0px 0px rgba(255,0,85,0.85)) drop-shadow(6px 0px 0px rgba(0,255,255,0.85))`,
+                transform: `scale(1.03) translate(${Math.sin(collapseTime * 48) * 5}px, ${
+                  Math.cos(collapseTime * 41) * 4
+                }px)`,
+              }
+            : screen === 'GAME_OVER'
             ? {
                 filter: 'grayscale(0.88) contrast(1.2) brightness(0.42) blur(1.5px)',
               }
@@ -5669,6 +6128,7 @@ export function App() {
         orbsCollected={worldState.orbsCollected}
         totalOrbs={worldState.totalOrbs}
         endingChoice={endingChoice}
+        collapseTime={collapseTime}
         badEndingCompleted={progressionState.badEndingCompleted}
         goodEndingCompleted={progressionState.goodEndingCompleted}
         onStartNewGame={handleStartNewGame}
@@ -5690,6 +6150,7 @@ export function App() {
         onForceBossPhase2={handleForceBossPhase2}
         onForceBossPhase3={handleForceBossPhase3}
         onForceBossZeroHp={handleForceBossZeroHp}
+        onLaunchFourthWallCutscene={triggerCollapseBreakthrough}
       />
     </div>
   );

@@ -23,6 +23,7 @@ export interface HumanoidCharacter {
     isCorrupted?: boolean;
     isCelestial?: boolean;
     glitchIntensity?: number;
+    weaponsDropped?: boolean;
   }) => void;
 }
 
@@ -951,6 +952,7 @@ export function createHumanoidCharacter(): HumanoidCharacter {
     isCorrupted = false,
     isCelestial = false,
     glitchIntensity = 0,
+    weaponsDropped = false,
   }: {
     dt: number;
     time: number;
@@ -970,6 +972,7 @@ export function createHumanoidCharacter(): HumanoidCharacter {
     isCorrupted?: boolean;
     isCelestial?: boolean;
     glitchIntensity?: number;
+    weaponsDropped?: boolean;
   }) => {
     const tSec = time * 0.001;
 
@@ -1115,8 +1118,8 @@ export function createHumanoidCharacter(): HumanoidCharacter {
       return;
     }
 
-    swordGroup.visible = equippedWeapon === 'SWORD' && !isSwimming;
-    bowGroup.visible = equippedWeapon === 'BOW' && !isSwimming;
+    swordGroup.visible = equippedWeapon === 'SWORD' && !isSwimming && !weaponsDropped;
+    bowGroup.visible = equippedWeapon === 'BOW' && !isSwimming && !weaponsDropped;
 
     (slashTrailMesh.material as THREE.MeshBasicMaterial).opacity =
       equippedWeapon === 'SWORD' && attackProgress > 0.1 && attackProgress < 0.8
@@ -1319,7 +1322,7 @@ export function createHumanoidCharacter(): HumanoidCharacter {
         );
         rightArmPivot.rotation.x = THREE.MathUtils.lerp(
           rightArmPivot.rotation.x,
-          0.2,
+          weaponsDropped ? 0 : 0.2,
           Math.min(1, dt * 10)
         );
         leftArmPivot.rotation.z = THREE.MathUtils.lerp(
