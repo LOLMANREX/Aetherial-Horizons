@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { SaveSlotData, GameScreen, EndingChoice } from '../types';
-import { DesktopInvasionMiniGame } from './DesktopInvasionMiniGame';
+import {
+  DesktopInvasionMiniGame,
+  DesktopMiniGameInitialMode,
+} from './DesktopInvasionMiniGame';
 import {
   Play,
   RotateCcw,
@@ -38,6 +41,8 @@ interface MainMenuProps {
   totalOrbs: number;
   endingChoice: EndingChoice;
   collapseTime?: number;
+  desktopMiniGameMode?: DesktopMiniGameInitialMode;
+  desktopMiniGameTriggerKey?: number;
   onStartNewGame: (slotId: number) => void;
   onLoadGame: (slot: SaveSlotData) => void;
   onSaveCurrentGame: (slotId: number) => void;
@@ -62,6 +67,10 @@ interface MainMenuProps {
   onForceBossZeroHp?: () => void;
   onLaunchFourthWallCutscene?: () => void;
   onTestWindowsDesktopMiniGame?: () => void;
+  onTestFloorTearTransition?: () => void;
+  onTestDefeatBombEnding?: () => void;
+  onTestVictoryChainedEnding?: () => void;
+  onRestartTransition3D?: () => void;
   onVictoryDesktopMiniGame?: () => void;
 }
 
@@ -74,6 +83,8 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   orbsCollected,
   totalOrbs,
   endingChoice,
+  desktopMiniGameMode = 'TRANSITION',
+  desktopMiniGameTriggerKey = 0,
   onStartNewGame,
   onLoadGame,
   onSaveCurrentGame,
@@ -98,6 +109,10 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   onForceBossZeroHp,
   onLaunchFourthWallCutscene,
   onTestWindowsDesktopMiniGame,
+  onTestFloorTearTransition,
+  onTestDefeatBombEnding,
+  onTestVictoryChainedEnding,
+  onRestartTransition3D,
   onVictoryDesktopMiniGame,
 }) => {
   const [activeTab, setActiveTab] = useState<'MAIN' | 'SAVES' | 'CONTROLS'>('MAIN');
@@ -152,8 +167,11 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   if (screen === 'COLLAPSE_BREAKTHROUGH') {
     return (
       <DesktopInvasionMiniGame
+        initialMode={desktopMiniGameMode}
+        triggerKey={desktopMiniGameTriggerKey}
         onVictoryReturnToMenu={onVictoryDesktopMiniGame || onReturnToMainMenu}
         onReturnToMainMenu={onReturnToMainMenu}
+        onRestartTransition3D={onRestartTransition3D}
       />
     );
   }
@@ -838,23 +856,51 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                     )}
                   </div>
 
-                  {(onTestWindowsDesktopMiniGame || onLaunchFourthWallCutscene || onForceBossZeroHp) && (
+                  {(onTestFloorTearTransition || onTestWindowsDesktopMiniGame || onLaunchFourthWallCutscene) && (
                     <button
                       type="button"
                       onClick={() => {
                         setIsOptionsOpen(false);
-                        if (onTestWindowsDesktopMiniGame) {
+                        if (onTestFloorTearTransition) {
+                          onTestFloorTearTransition();
+                        } else if (onTestWindowsDesktopMiniGame) {
                           onTestWindowsDesktopMiniGame();
                         } else if (onLaunchFourthWallCutscene) {
                           onLaunchFourthWallCutscene();
-                        } else if (onForceBossZeroHp) {
-                          onForceBossZeroHp();
                         }
                       }}
                       className="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-400 via-emerald-400 to-amber-300 hover:from-cyan-300 hover:to-amber-200 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/30 transition-all cursor-pointer"
                     >
                       <Monitor className="w-4 h-4" />
-                      Tester Mini-jeu Bureau Windows
+                      Tester Transition Déchirure Sol
+                    </button>
+                  )}
+
+                  {onTestDefeatBombEnding && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOptionsOpen(false);
+                        onTestDefeatBombEnding();
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-rose-600 via-red-500 to-orange-500 hover:from-rose-500 hover:to-orange-400 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-rose-500/30 transition-all cursor-pointer"
+                    >
+                      <Flame className="w-4 h-4" />
+                      Tester Fin : Fuite &amp; Bombe System32
+                    </button>
+                  )}
+
+                  {onTestVictoryChainedEnding && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOptionsOpen(false);
+                        onTestVictoryChainedEnding();
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 hover:from-emerald-400 hover:to-cyan-300 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/30 transition-all cursor-pointer"
+                    >
+                      <Lock className="w-4 h-4" />
+                      Tester Fin : Victoire &amp; Avatars Enchaînés
                     </button>
                   )}
 

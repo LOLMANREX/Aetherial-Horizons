@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { HUD } from './components/HUD';
 import { MainMenu } from './components/MainMenu';
+import { DesktopMiniGameInitialMode } from './components/DesktopInvasionMiniGame';
 import {
   CutsceneOverlay,
   INTRO_SLIDES,
@@ -189,6 +190,9 @@ export function App() {
   const [cutsceneStep, setCutsceneStep] = useState(0);
   const [cutsceneProgress, setCutsceneProgress] = useState(0);
   const [collapseTime, setCollapseTime] = useState(0);
+  const [desktopMiniGameMode, setDesktopMiniGameMode] =
+    useState<DesktopMiniGameInitialMode>('TRANSITION');
+  const [desktopMiniGameTriggerKey, setDesktopMiniGameTriggerKey] = useState(0);
   const [endingChoice, setEndingChoice] = useState<EndingChoice>('NONE');
   const [progressionState, setProgressionState] = useState(() =>
     SaveManager.getState()
@@ -314,6 +318,7 @@ export function App() {
     crownGroupMesh: null as THREE.Group | null,
     droppedWeaponsGroup: null as THREE.Group | null,
     dissolutionParticlesGroup: null as THREE.Points | null,
+    floorShatterGroup: null as THREE.Group | null,
     resetSceneWireframe: null as (() => void) | null,
     collapseTimer: 0,
     collapseWeaponDropPlayed: false,
@@ -862,6 +867,10 @@ export function App() {
       st.dissolutionParticlesGroup.visible = false;
     }
 
+    if (st.floorShatterGroup) {
+      st.floorShatterGroup.visible = true;
+    }
+
     st.enemyInstances.forEach((enemy) => {
       enemy.alive = false;
       enemy.group.visible = false;
@@ -869,6 +878,8 @@ export function App() {
 
     setEndingChoice('SAVE_WORLD');
     setCollapseTime(0);
+    setDesktopMiniGameMode('TRANSITION');
+    setDesktopMiniGameTriggerKey((prev) => prev + 1);
     setRecentCollectName(null);
 
     setWorldState((prev) => ({
@@ -1673,6 +1684,9 @@ export function App() {
     if (st.dissolutionParticlesGroup) {
       st.dissolutionParticlesGroup.visible = false;
     }
+    if (st.floorShatterGroup) {
+      st.floorShatterGroup.visible = false;
+    }
     if (st.alterEgoHumanoid) {
       st.alterEgoHumanoid.group.visible = false;
     }
@@ -1697,8 +1711,36 @@ export function App() {
     const next = SaveManager.setSecretDesktopEndingCompleted(true);
     setProgressionState(next);
     handleReturnToMainMenu();
-    showToast('SUCCÈS SECRET VALIDÉ : Menaces Neutralisées & Desktop Pets Asservis !');
+    showToast('FIN SECRÈTE VALIDÉE : Anomalies Soumises et Verrouillées dans le Noyau !');
   }, [handleReturnToMainMenu, showToast]);
+
+  const handleRestartTransition3D = useCallback(() => {
+    gameRef.current.collapseTimer = 0;
+    setCollapseTime(0);
+    setDesktopMiniGameMode('TRANSITION');
+  }, []);
+
+  const handleTestFloorTearTransition = useCallback(() => {
+    triggerCollapseBreakthrough();
+    setDesktopMiniGameMode('TRANSITION');
+    setDesktopMiniGameTriggerKey((prev) => prev + 1);
+  }, [triggerCollapseBreakthrough]);
+
+  const handleTestDefeatBombEnding = useCallback(() => {
+    triggerCollapseBreakthrough();
+    gameRef.current.collapseTimer = 5.0;
+    setCollapseTime(5.0);
+    setDesktopMiniGameMode('DEFEAT_CINEMATIC');
+    setDesktopMiniGameTriggerKey((prev) => prev + 1);
+  }, [triggerCollapseBreakthrough]);
+
+  const handleTestVictoryChainedEnding = useCallback(() => {
+    triggerCollapseBreakthrough();
+    gameRef.current.collapseTimer = 5.0;
+    setCollapseTime(5.0);
+    setDesktopMiniGameMode('VICTORY_CINEMATIC');
+    setDesktopMiniGameTriggerKey((prev) => prev + 1);
+  }, [triggerCollapseBreakthrough]);
 
   const handleToggleCamera = useCallback(() => {
     const nextMode =
@@ -2661,6 +2703,97 @@ export function App() {
     dissolutionParticles.visible = false;
     scene.add(dissolutionParticles);
     gameRef.current.dissolutionParticlesGroup = dissolutionParticles;
+
+    const floorShatterGroup = new THREE.Group();
+    floorShatterGroup.position.set(0, centerGroundY + 0.05, 0);
+    floorShatterGroup.visible = false;
+
+    const abyssHoleMesh = new THREE.Mesh(
+      new THREE.CircleGeometry(4.8, 32),
+      new THREE.MeshBasicMaterial({
+        color: 0x020008,
+        side: THREE.DoubleSide,
+      })
+    );
+    abyssHoleMesh.rotation.x = -Math.PI / 2;
+    floorShatterGroup.add(abyssHoleMesh);
+
+    const abyssRimMesh = new THREE.Mesh(
+      new THREE.RingGeometry(4.1, 4.95, 32),
+      new THREE.MeshBasicMaterial({
+        color: 0xf43f5e,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.9,
+      })
+    );
+    abyssRimMesh.rotation.x = -Math.PI / 2;
+    abyssRimMesh.position.y = 0.02;
+    floorShatterGroup.add(abyssRimMesh);
+
+    const floorShards: {
+      mesh: THREE.Group;
+      baseX: number;
+      baseZ: number;
+      vx: number;
+      vy: number;
+      vz: number;
+      rx: number;
+      ry: number;
+      rz: number;
+    }[] = [];
+
+    for (let s = 0; s < 32; s++) {
+      const ringIdx = Math.floor(s / 8);
+      const angle = (s % 8) * ((Math.PI * 2) / 8) + ringIdx * 0.35;
+      const dist = 0.65 + ringIdx * 1.05;
+      const bx = Math.cos(angle) * dist;
+      const bz = Math.sin(angle) * dist;
+
+      const shardGroup = new THREE.Group();
+      const polySides = 3 + (s % 4);
+      const shardGeo = new THREE.CylinderGeometry(
+        0.58 + (s % 3) * 0.14,
+        0.44,
+        0.24,
+        polySides
+      );
+      const shardMat = new THREE.MeshStandardMaterial({
+        color: s % 2 === 0 ? 0x1e293b : 0x0f172a,
+        emissive: s % 3 === 0 ? 0xe11d48 : 0x38bdf8,
+        emissiveIntensity: 0.45,
+        roughness: 0.6,
+        metalness: 0.3,
+        flatShading: true,
+      });
+      const shardSolid = new THREE.Mesh(shardGeo, shardMat);
+      const shardWire = new THREE.Mesh(
+        shardGeo,
+        new THREE.MeshBasicMaterial({
+          color: s % 2 === 0 ? 0x38bdf8 : 0xfde047,
+          wireframe: true,
+        })
+      );
+      shardGroup.add(shardSolid);
+      shardGroup.add(shardWire);
+      shardGroup.position.set(bx, 0.08, bz);
+      floorShatterGroup.add(shardGroup);
+
+      floorShards.push({
+        mesh: shardGroup,
+        baseX: bx,
+        baseZ: bz,
+        vx: Math.cos(angle) * (0.8 + (s % 5) * 0.35),
+        vy: 1.2 + (s % 4) * 0.45,
+        vz: Math.sin(angle) * (0.8 + (s % 5) * 0.35),
+        rx: ((s % 5) - 2) * 3.2,
+        ry: ((s % 7) - 3) * 2.8,
+        rz: ((s % 3) - 1) * 3.6,
+      });
+    }
+
+    scene.add(floorShatterGroup);
+    gameRef.current.floorShatterGroup = floorShatterGroup;
 
     const savedMaterialsMap = new Map<
       THREE.Material,
@@ -4258,9 +4391,15 @@ export function App() {
 
       if (state.screen === 'COLLAPSE_BREAKTHROUGH') {
         state.collapseTimer += dt;
+        const t = state.collapseTimer;
+
+        hudSyncTimer += dt;
+        if (hudSyncTimer >= 0.03) {
+          hudSyncTimer = 0;
+          setCollapseTime(t);
+        }
+
         fpViewModel.group.visible = false;
-        playerGroup.visible = false;
-        alterEgo.group.visible = false;
         droppedWeaponsGroup.visible = false;
         dissolutionParticles.visible = false;
         if (state.bossInstance) {
@@ -4268,9 +4407,113 @@ export function App() {
         }
         setSceneWireframeMode(false);
         const cY = getTerrainHeight(0, 0);
-        camera.up.set(0, 1, 0);
-        camera.position.set(0, cY + 2.2, 5.5);
-        camera.lookAt(0, cY + 1.5, 0);
+
+        if (t < 2.85) {
+          floorShatterGroup.visible = true;
+          const dashP = Math.min(1, t / 0.55);
+          const shatterP = Math.max(0, Math.min(1, (t - 0.45) / 1.45));
+          const jumpP = Math.max(0, Math.min(1, (t - 1.15) / 0.72));
+
+          const holeScale = Math.max(0.01, Math.min(1.15, shatterP * 1.4));
+          abyssHoleMesh.scale.setScalar(holeScale);
+          abyssRimMesh.scale.setScalar(holeScale);
+
+          for (let i = 0; i < floorShards.length; i++) {
+            const sh = floorShards[i];
+            if (shatterP <= 0) {
+              sh.mesh.position.set(sh.baseX, 0.08, sh.baseZ);
+              sh.mesh.rotation.set(0, 0, 0);
+            } else {
+              const dropY =
+                sh.vy * shatterP - 12.5 * shatterP * shatterP;
+              sh.mesh.position.set(
+                sh.baseX + sh.vx * shatterP,
+                0.08 + dropY,
+                sh.baseZ + sh.vz * shatterP
+              );
+              sh.mesh.rotation.set(
+                sh.rx * shatterP,
+                sh.ry * shatterP,
+                sh.rz * shatterP
+              );
+            }
+          }
+
+          const leftX = THREE.MathUtils.lerp(-2.6, -0.85, dashP);
+          const rightX = THREE.MathUtils.lerp(2.6, 0.85, dashP);
+          const leapHeight = jumpP * jumpP * 13.5;
+          const leapForwardZ = jumpP * 4.6;
+
+          playerGroup.visible = jumpP < 0.96;
+          playerGroup.scale.set(1, 1, 1);
+          playerGroup.position.set(leftX, cY + leapHeight, leapForwardZ);
+          playerGroup.rotation.set(0, jumpP > 0 ? Math.PI : Math.PI * 0.5, 0);
+
+          alterEgo.group.visible = jumpP < 0.96;
+          alterEgo.group.scale.set(1.08, 1.08, 1.08);
+          alterEgo.group.position.set(rightX, cY + leapHeight, leapForwardZ);
+          alterEgo.group.rotation.set(0, jumpP > 0 ? Math.PI : -Math.PI * 0.5, 0);
+
+          const strikeAnim =
+            t >= 0.25 && t < 1.05 ? Math.min(1, (t - 0.25) / 0.45) : 0;
+
+          humanoid.updateAnimation({
+            dt,
+            time: now,
+            speed: dashP < 1 ? 9 : 0,
+            forwardInput: dashP < 1 ? 1 : 0,
+            rightInput: 0,
+            isSprinting: dashP < 1,
+            isGrounded: jumpP <= 0,
+            isSwimming: false,
+            headPitch: -0.25,
+            equippedWeapon: 'SWORD',
+            attackProgress: strikeAnim,
+            bowDrawProgress: 0,
+            bowReleaseTimer: 0,
+            hasArrows: true,
+            isSeatedOnThrone: false,
+            isCorrupted: false,
+            isCelestial: true,
+          });
+
+          alterEgo.updateAnimation({
+            dt,
+            time: now,
+            speed: dashP < 1 ? 9 : 0,
+            forwardInput: dashP < 1 ? 1 : 0,
+            rightInput: 0,
+            isSprinting: dashP < 1,
+            isGrounded: jumpP <= 0,
+            isSwimming: false,
+            headPitch: -0.25,
+            equippedWeapon: 'SWORD',
+            attackProgress: strikeAnim,
+            bowDrawProgress: 0,
+            bowReleaseTimer: 0,
+            hasArrows: true,
+            isSeatedOnThrone: false,
+            isCorrupted: true,
+            isCelestial: false,
+          });
+
+          const shake = shatterP > 0 && jumpP < 0.8 ? 0.24 : 0;
+          camera.up.set(0, 1, 0);
+          camera.position.set(
+            Math.sin(now * 0.06) * shake,
+            cY + 3.6 + Math.cos(now * 0.05) * shake,
+            6.8
+          );
+          camera.lookAt(0, cY + 0.6 + jumpP * 3.2, 0);
+        } else {
+          floorShatterGroup.visible = false;
+          playerGroup.visible = false;
+          alterEgo.group.visible = false;
+          camera.up.set(0, 1, 0);
+          camera.position.set(0, cY + 2.2, 5.5);
+          camera.lookAt(0, cY + 1.5, 0);
+        }
+
         renderer.render(scene, camera);
         return;
       }
@@ -5773,15 +6016,36 @@ export function App() {
           }
         }}
         style={
-          screen === 'COLLAPSE_BREAKTHROUGH' && collapseTime >= 5.8 && collapseTime < 15.5
-            ? {
-                filter: `contrast(1.65) saturate(2.1) hue-rotate(${Math.round(
-                  Math.sin(collapseTime * 18) * 65
-                )}deg) drop-shadow(-6px 0px 0px rgba(255,0,85,0.85)) drop-shadow(6px 0px 0px rgba(0,255,255,0.85))`,
-                transform: `scale(1.03) translate(${Math.sin(collapseTime * 48) * 5}px, ${
-                  Math.cos(collapseTime * 41) * 4
-                }px)`,
-              }
+          screen === 'COLLAPSE_BREAKTHROUGH' &&
+          desktopMiniGameMode === 'TRANSITION' &&
+          collapseTime < 2.95
+            ? collapseTime < 1.35
+              ? {
+                  zIndex: 55,
+                }
+              : (() => {
+                  const winP = Math.min(1, (collapseTime - 1.35) / 1.6);
+                  const shrinkScale =
+                    winP < 0.55
+                      ? 0.62 * (1 - winP * 0.52)
+                      : Math.max(
+                          0.01,
+                          0.62 * (0.714 - ((winP - 0.55) / 0.45) * 0.7)
+                        );
+                  return {
+                    zIndex: 55,
+                    transform: `scale(${shrinkScale}) rotate(${
+                      winP > 0.55 ? (winP - 0.55) * -14 : 0
+                    }deg)`,
+                    borderRadius: '24px',
+                    overflow: 'hidden',
+                    filter: `contrast(${1 + winP * 1.4}) saturate(${
+                      1 + winP * 2.2
+                    }) sepia(${winP * 0.65}) hue-rotate(${-winP * 35}deg)`,
+                    opacity: winP > 0.9 ? Math.max(0, (1 - winP) * 10) : 1,
+                    pointerEvents: 'none' as const,
+                  };
+                })()
             : screen === 'GAME_OVER'
             ? {
                 filter: 'grayscale(0.88) contrast(1.2) brightness(0.42) blur(1.5px)',
@@ -5792,7 +6056,7 @@ export function App() {
               }
             : undefined
         }
-        className={`fixed inset-0 w-full h-full z-0 transition-all duration-1000 ${
+        className={`fixed inset-0 w-full h-full z-0 transition-none ${
           screen === 'PLAYING' && isMouseCaptured
             ? 'cursor-none'
             : 'cursor-crosshair'
@@ -5862,6 +6126,8 @@ export function App() {
         totalOrbs={worldState.totalOrbs}
         endingChoice={endingChoice}
         collapseTime={collapseTime}
+        desktopMiniGameMode={desktopMiniGameMode}
+        desktopMiniGameTriggerKey={desktopMiniGameTriggerKey}
         badEndingCompleted={progressionState.badEndingCompleted}
         goodEndingCompleted={progressionState.goodEndingCompleted}
         secretDesktopEndingCompleted={progressionState.secretDesktopEndingCompleted}
@@ -5885,7 +6151,11 @@ export function App() {
         onForceBossPhase3={handleForceBossPhase3}
         onForceBossZeroHp={handleForceBossZeroHp}
         onLaunchFourthWallCutscene={triggerCollapseBreakthrough}
-        onTestWindowsDesktopMiniGame={triggerCollapseBreakthrough}
+        onTestWindowsDesktopMiniGame={handleTestFloorTearTransition}
+        onTestFloorTearTransition={handleTestFloorTearTransition}
+        onTestDefeatBombEnding={handleTestDefeatBombEnding}
+        onTestVictoryChainedEnding={handleTestVictoryChainedEnding}
+        onRestartTransition3D={handleRestartTransition3D}
         onVictoryDesktopMiniGame={handleVictoryDesktopMiniGame}
       />
     </div>
