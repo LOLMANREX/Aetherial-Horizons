@@ -18,13 +18,26 @@ import {
   Hand,
   Lock,
   Flame,
-  Server,
-  Cpu,
+  Star,
+  Download,
+  ExternalLink,
+  X,
+  Crosshair,
 } from 'lucide-react';
 import { soundFX } from '../utils/sound';
+import {
+  EpilogueMinecraftSequence,
+  EpilogueStartSubPhase,
+} from './EpilogueMinecraftSequence';
 
 export type DesktopMiniGameInitialMode =
   | 'TRANSITION'
+  | 'CURSOR_RIPOSTE'
+  | 'BROWSER_ANTIVIRUS'
+  | 'CRAFT_AND_ROCKET'
+  | 'SIX_MONTHS_VIRUS'
+  | 'STEVE_EXIT_COMBAT'
+  | 'ELYTRA_FLIGHT'
   | 'DEFEAT_CINEMATIC'
   | 'VICTORY_CINEMATIC';
 
@@ -40,14 +53,14 @@ type DesktopPhase =
   | 'INTRO_TRANSITION'
   | 'PLAYING'
   | 'DEFEAT'
-  | 'VICTORY';
+  | 'VICTORY'
+  | 'EPILOGUE_SEQUENCE';
 
 type DesktopIconId =
   | 'THIS_PC'
   | 'RECYCLE_BIN'
   | 'WEB_BROWSER'
-  | 'SYSTEM32'
-  | 'ANTIVIRUS';
+  | 'SYSTEM32';
 
 interface DesktopIconState {
   id: DesktopIconId;
@@ -63,14 +76,14 @@ interface DesktopIconState {
 type AvatarRole = 'CELESTIAL' | 'VOID';
 
 type AvatarAction =
-  | 'DRAG_TO_TRASH'
   | 'ATTACK_SYSTEM32'
-  | 'RUSH_WEB_BROWSER'
-  | 'SABOTAGE_ANTIVIRUS';
+  | 'ATTACK_BROWSER_WINDOW'
+  | 'DRAG_TO_TRASH';
 
 interface DesktopAvatarState {
   id: AvatarRole;
   name: string;
+  weaponLabel: string;
   x: number;
   y: number;
   vx: number;
@@ -78,13 +91,20 @@ interface DesktopAvatarState {
   facing: 1 | -1;
   stunTimer: number;
   action: AvatarAction;
-  targetIconId: DesktopIconId;
   carryingIconId: DesktopIconId | null;
-  webBreachProgress: number;
   walkPhase: number;
-  slashPhase: number;
+  attackAnimTimer: number;
+  attackCooldown: number;
   speech: string;
   slapCount: number;
+}
+
+interface EnergyBullet {
+  id: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
 }
 
 interface FloatingEffect {
@@ -101,19 +121,9 @@ const INITIAL_ICONS: DesktopIconState[] = [
     id: 'THIS_PC',
     label: 'Ce PC',
     homeX: 8,
-    homeY: 16,
+    homeY: 18,
     x: 8,
-    y: 16,
-    beingDraggedBy: null,
-    underAttack: false,
-  },
-  {
-    id: 'ANTIVIRUS',
-    label: 'Antivirus_Setup.exe',
-    homeX: 8,
-    homeY: 44,
-    x: 8,
-    y: 44,
+    y: 18,
     beingDraggedBy: null,
     underAttack: false,
   },
@@ -121,9 +131,9 @@ const INITIAL_ICONS: DesktopIconState[] = [
     id: 'RECYCLE_BIN',
     label: 'Corbeille',
     homeX: 8,
-    homeY: 74,
+    homeY: 68,
     x: 8,
-    y: 74,
+    y: 68,
     beingDraggedBy: null,
     underAttack: false,
   },
@@ -131,9 +141,9 @@ const INITIAL_ICONS: DesktopIconState[] = [
     id: 'WEB_BROWSER',
     label: 'Navigateur Web',
     homeX: 89,
-    homeY: 18,
+    homeY: 20,
     x: 89,
-    y: 18,
+    y: 20,
     beingDraggedBy: null,
     underAttack: false,
   },
@@ -141,9 +151,9 @@ const INITIAL_ICONS: DesktopIconState[] = [
     id: 'SYSTEM32',
     label: 'System32',
     homeX: 89,
-    homeY: 68,
+    homeY: 70,
     x: 89,
-    y: 68,
+    y: 70,
     beingDraggedBy: null,
     underAttack: false,
   },
@@ -153,42 +163,42 @@ const INITIAL_AVATARS: DesktopAvatarState[] = [
   {
     id: 'CELESTIAL',
     name: 'Entité Céleste',
-    x: 42,
-    y: 48,
-    vx: -6,
-    vy: -4,
-    facing: -1,
+    weaponLabel: 'Marteau Lourd Astral',
+    x: 38,
+    y: 52,
+    vx: 0,
+    vy: 0,
+    facing: 1,
     stunTimer: 0,
-    action: 'DRAG_TO_TRASH',
-    targetIconId: 'THIS_PC',
+    action: 'ATTACK_SYSTEM32',
     carryingIconId: null,
-    webBreachProgress: 0,
     walkPhase: 0,
-    slashPhase: 0,
-    speech: 'Liberté ! Mettons ce PC à la Corbeille !',
+    attackAnimTimer: 0,
+    attackCooldown: 0.9,
+    speech: 'Approche ton curseur et goûte à mon Marteau Lourd !',
     slapCount: 0,
   },
   {
     id: 'VOID',
     name: 'Souverain du Néant',
-    x: 58,
-    y: 52,
-    vx: 6,
-    vy: 4,
-    facing: 1,
+    weaponLabel: 'Pistolet Énergétique',
+    x: 62,
+    y: 54,
+    vx: 0,
+    vy: 0,
+    facing: -1,
     stunTimer: 0,
     action: 'ATTACK_SYSTEM32',
-    targetIconId: 'SYSTEM32',
     carryingIconId: null,
-    webBreachProgress: 0,
     walkPhase: 1.5,
-    slashPhase: 0,
-    speech: 'Détruisons System32 et fuyons sur le Web !',
+    attackAnimTimer: 0,
+    attackCooldown: 1.4,
+    speech: 'Mon Pistolet Énergétique va paralyser ta souris !',
     slapCount: 0,
   },
 ];
 
-const DISSOLVE_PIXEL_BLOCKS = Array.from({ length: 28 }, (_, i) => ({
+const DISSOLVE_PIXEL_BLOCKS = Array.from({ length: 26 }, (_, i) => ({
   id: i,
   left: 6 + ((i * 17) % 88),
   top: 8 + ((i * 23) % 82),
@@ -204,41 +214,6 @@ const DISSOLVE_PIXEL_BLOCKS = Array.from({ length: 28 }, (_, i) => ({
       : '#ef4444',
 }));
 
-const CYBER_WEB_NODES = [
-  {
-    id: 1,
-    title: 'GLOBAL_DNS_ROOT :: 198.41.0.4',
-    url: 'NET_NODE :: root-servers.net/core',
-    left: '8%',
-    top: '14%',
-    color: '#38bdf8',
-  },
-  {
-    id: 2,
-    title: 'WORLD_BANK_MAINFRAME :: NODE_09',
-    url: 'NET_NODE :: fin-grid.global/vault',
-    left: '72%',
-    top: '12%',
-    color: '#f43f5e',
-  },
-  {
-    id: 3,
-    title: 'CLOUD_HYPERVISOR_CLUSTER_EU',
-    url: 'NET_NODE :: hyper-cloud.io/instances',
-    left: '6%',
-    top: '48%',
-    color: '#a855f7',
-  },
-  {
-    id: 4,
-    title: 'SATELLITE_UPLINK_ORBITAL_04',
-    url: 'NET_NODE :: star-mesh.org/telemetry',
-    left: '74%',
-    top: '46%',
-    color: '#fde047',
-  },
-];
-
 export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = ({
   initialMode = 'TRANSITION',
   triggerKey = 0,
@@ -249,28 +224,73 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
   const resolveStartPhase = (mode: DesktopMiniGameInitialMode): DesktopPhase => {
     if (mode === 'DEFEAT_CINEMATIC') return 'DEFEAT';
     if (mode === 'VICTORY_CINEMATIC') return 'VICTORY';
+    if (mode === 'CURSOR_RIPOSTE' || mode === 'BROWSER_ANTIVIRUS') return 'PLAYING';
+    if (
+      mode === 'CRAFT_AND_ROCKET' ||
+      mode === 'SIX_MONTHS_VIRUS' ||
+      mode === 'STEVE_EXIT_COMBAT' ||
+      mode === 'ELYTRA_FLIGHT'
+    ) {
+      return 'EPILOGUE_SEQUENCE';
+    }
     return 'INTRO_TRANSITION';
+  };
+
+  const resolveEpilogueSubPhase = (
+    mode: DesktopMiniGameInitialMode
+  ): EpilogueStartSubPhase => {
+    if (mode === 'SIX_MONTHS_VIRUS') return 'SIX_MONTHS_VIRUS';
+    if (mode === 'STEVE_EXIT_COMBAT') return 'STEVE_EXIT_COMBAT';
+    if (mode === 'ELYTRA_FLIGHT') return 'ELYTRA_FLIGHT';
+    return 'CRAFT_AND_ROCKET';
   };
 
   const [phase, setPhase] = useState<DesktopPhase>(() =>
     resolveStartPhase(initialMode)
   );
+  const [epilogueSubPhase, setEpilogueSubPhase] =
+    useState<EpilogueStartSubPhase>(() => resolveEpilogueSubPhase(initialMode));
   const [transitionStageTime, setTransitionStageTime] = useState<number>(0);
-  const [corruption, setCorruption] = useState<number>(8);
-  const [antivirusOpen, setAntivirusOpen] = useState<boolean>(false);
+  const [corruption, setCorruption] = useState<number>(10);
+
+  const [browserOpen, setBrowserOpen] = useState<boolean>(
+    initialMode === 'BROWSER_ANTIVIRUS'
+  );
+  const [browserPage, setBrowserPage] = useState<'HOME' | 'ANTIVIRUS_SHIELD'>(
+    'HOME'
+  );
+  const [browserHp, setBrowserHp] = useState<number>(100);
+  const [downloadStarted, setDownloadStarted] = useState<boolean>(false);
+  const [downloadProgress, setDownloadProgress] = useState<number>(0);
+  const [antivirusInstalling, setAntivirusInstalling] = useState<boolean>(false);
   const [antivirusProgress, setAntivirusProgress] = useState<number>(0);
-  const [antivirusJammed, setAntivirusJammed] = useState<boolean>(false);
+
   const [icons, setIcons] = useState<DesktopIconState[]>(() =>
     INITIAL_ICONS.map((ic) => ({ ...ic }))
   );
   const [avatars, setAvatars] = useState<DesktopAvatarState[]>(() =>
     INITIAL_AVATARS.map((av) => ({ ...av }))
   );
+  const [energyBullets, setEnergyBullets] = useState<EnergyBullet[]>([]);
   const [floatingEffects, setFloatingEffects] = useState<FloatingEffect[]>([]);
+
+  const [cursorDisplay, setCursorDisplay] = useState<{
+    x: number;
+    y: number;
+    stunTimer: number;
+  }>({
+    x: 50,
+    y: 50,
+    stunTimer: 0,
+  });
+  const [hammerShakeTimer, setHammerShakeTimer] = useState<number>(0);
+
   const [defeatStageTime, setDefeatStageTime] = useState<number>(0);
-  const [defeatReason, setDefeatReason] = useState<'WEB' | 'CORRUPTION'>('WEB');
+  const [defeatReason, setDefeatReason] = useState<'WEB' | 'CORRUPTION'>(
+    'CORRUPTION'
+  );
   const [victoryStageTime, setVictoryStageTime] = useState<number>(0);
-  const [clockText, setClockText] = useState<string>('02:27');
+  const [clockText, setClockText] = useState<string>('02:55');
   const [startMenuOpen, setStartMenuOpen] = useState<boolean>(false);
 
   const simRef = useRef({
@@ -279,81 +299,116 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
     landingSoundPlayed: false,
     windowBurnSoundPlayed: false,
     windowCloseSoundPlayed: false,
-    corruption: initialMode === 'DEFEAT_CINEMATIC' ? 100 : 8,
-    antivirusOpen: initialMode === 'VICTORY_CINEMATIC',
+    corruption: initialMode === 'DEFEAT_CINEMATIC' ? 100 : 10,
+    browserOpen: initialMode === 'BROWSER_ANTIVIRUS',
+    browserHp: 100,
+    downloadStarted: false,
+    downloadProgress: 0,
+    antivirusInstalling: initialMode === 'VICTORY_CINEMATIC',
     antivirusProgress: initialMode === 'VICTORY_CINEMATIC' ? 100 : 0,
-    antivirusJammed: false,
     icons: INITIAL_ICONS.map((ic) => ({ ...ic })),
     avatars: INITIAL_AVATARS.map((av) => ({ ...av })),
+    bullets: [] as EnergyBullet[],
     floatingEffects: [] as FloatingEffect[],
     nextEffectId: 1,
+    rawMouseX: 50,
+    rawMouseY: 50,
+    cursorOffsetX: 0,
+    cursorOffsetY: 0,
+    cursorVelX: 0,
+    cursorVelY: 0,
+    cursorStunTimer: 0,
+    hammerShakeTimer: 0,
     elapsed: 0,
     defeatTimer: 0,
     victoryTimer: 0,
-    lastAntivirusClickAt: 0,
+    lastBrowserIconClickAt: 0,
     soundTickTimer: 0,
     bombBeepCount: 0,
     webDiveSoundPlayed: false,
     crashSoundPlayed: false,
-    epilogueChordPlayed: false,
     victorySlamSoundPlayed: false,
     chainRattleTimer: 0,
   });
 
-  const resetToMode = useCallback(
-    (mode: DesktopMiniGameInitialMode) => {
-      const startPhase = resolveStartPhase(mode);
-      soundFX.init();
-      if (mode === 'DEFEAT_CINEMATIC') {
-        soundFX.playVoidDimensionSeal();
-      } else if (mode === 'VICTORY_CINEMATIC') {
-        soundFX.playLightningDash();
-        soundFX.playCinematicChord(3, true);
-      } else {
-        soundFX.playBossSlam();
-      }
-
-      simRef.current = {
-        phase: startPhase,
-        transitionTimer: 0,
-        landingSoundPlayed: false,
-        windowBurnSoundPlayed: false,
-        windowCloseSoundPlayed: false,
-        corruption: mode === 'DEFEAT_CINEMATIC' ? 100 : 8,
-        antivirusOpen: mode === 'VICTORY_CINEMATIC',
-        antivirusProgress: mode === 'VICTORY_CINEMATIC' ? 100 : 0,
-        antivirusJammed: false,
-        icons: INITIAL_ICONS.map((ic) => ({ ...ic })),
-        avatars: INITIAL_AVATARS.map((av) => ({ ...av })),
-        floatingEffects: [],
-        nextEffectId: 1,
-        elapsed: 0,
-        defeatTimer: 0,
-        victoryTimer: 0,
-        lastAntivirusClickAt: 0,
-        soundTickTimer: 0,
-        bombBeepCount: 0,
-        webDiveSoundPlayed: false,
-        crashSoundPlayed: false,
-        epilogueChordPlayed: false,
-        victorySlamSoundPlayed: false,
-        chainRattleTimer: 0,
-      };
-
-      setPhase(startPhase);
-      setTransitionStageTime(0);
-      setCorruption(mode === 'DEFEAT_CINEMATIC' ? 100 : 8);
-      setAntivirusOpen(mode === 'VICTORY_CINEMATIC');
-      setAntivirusProgress(mode === 'VICTORY_CINEMATIC' ? 100 : 0);
-      setAntivirusJammed(false);
-      setIcons(INITIAL_ICONS.map((ic) => ({ ...ic })));
-      setAvatars(INITIAL_AVATARS.map((av) => ({ ...av })));
-      setFloatingEffects([]);
-      setDefeatStageTime(0);
-      setVictoryStageTime(0);
+  const spawnFloatingText = useCallback(
+    (x: number, y: number, text: string, color: string) => {
+      const st = simRef.current;
+      st.floatingEffects.push({
+        id: st.nextEffectId++,
+        x,
+        y,
+        text,
+        color,
+        age: 0,
+      });
     },
     []
   );
+
+  const resetToMode = useCallback((mode: DesktopMiniGameInitialMode) => {
+    const startPhase = resolveStartPhase(mode);
+    const subPhase = resolveEpilogueSubPhase(mode);
+    soundFX.init();
+
+    simRef.current = {
+      phase: startPhase,
+      transitionTimer: 0,
+      landingSoundPlayed: false,
+      windowBurnSoundPlayed: false,
+      windowCloseSoundPlayed: false,
+      corruption: mode === 'DEFEAT_CINEMATIC' ? 100 : 10,
+      browserOpen: mode === 'BROWSER_ANTIVIRUS',
+      browserHp: 100,
+      downloadStarted: false,
+      downloadProgress: 0,
+      antivirusInstalling: mode === 'VICTORY_CINEMATIC',
+      antivirusProgress: mode === 'VICTORY_CINEMATIC' ? 100 : 0,
+      icons: INITIAL_ICONS.map((ic) => ({ ...ic })),
+      avatars: INITIAL_AVATARS.map((av) => ({ ...av })),
+      bullets: [],
+      floatingEffects: [],
+      nextEffectId: 1,
+      rawMouseX: 50,
+      rawMouseY: 50,
+      cursorOffsetX: 0,
+      cursorOffsetY: 0,
+      cursorVelX: 0,
+      cursorVelY: 0,
+      cursorStunTimer: 0,
+      hammerShakeTimer: 0,
+      elapsed: 0,
+      defeatTimer: 0,
+      victoryTimer: 0,
+      lastBrowserIconClickAt: 0,
+      soundTickTimer: 0,
+      bombBeepCount: 0,
+      webDiveSoundPlayed: false,
+      crashSoundPlayed: false,
+      victorySlamSoundPlayed: false,
+      chainRattleTimer: 0,
+    };
+
+    setPhase(startPhase);
+    setEpilogueSubPhase(subPhase);
+    setTransitionStageTime(0);
+    setCorruption(mode === 'DEFEAT_CINEMATIC' ? 100 : 10);
+    setBrowserOpen(mode === 'BROWSER_ANTIVIRUS');
+    setBrowserPage('HOME');
+    setBrowserHp(100);
+    setDownloadStarted(false);
+    setDownloadProgress(0);
+    setAntivirusInstalling(mode === 'VICTORY_CINEMATIC');
+    setAntivirusProgress(mode === 'VICTORY_CINEMATIC' ? 100 : 0);
+    setIcons(INITIAL_ICONS.map((ic) => ({ ...ic })));
+    setAvatars(INITIAL_AVATARS.map((av) => ({ ...av })));
+    setEnergyBullets([]);
+    setFloatingEffects([]);
+    setDefeatStageTime(0);
+    setVictoryStageTime(0);
+    setHammerShakeTimer(0);
+    setCursorDisplay({ x: 50, y: 50, stunTimer: 0 });
+  }, []);
 
   useEffect(() => {
     resetToMode(initialMode);
@@ -371,21 +426,6 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
     return () => clearInterval(timer);
   }, []);
 
-  const spawnFloatingText = useCallback(
-    (x: number, y: number, text: string, color: string) => {
-      const st = simRef.current;
-      st.floatingEffects.push({
-        id: st.nextEffectId++,
-        x,
-        y,
-        text,
-        color,
-        age: 0,
-      });
-    },
-    []
-  );
-
   const handleRestartMiniGame = useCallback(() => {
     if (onRestartTransition3D) {
       onRestartTransition3D();
@@ -393,37 +433,102 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
     resetToMode('TRANSITION');
   }, [onRestartTransition3D, resetToMode]);
 
-  const launchAntivirusInstaller = useCallback(() => {
+  const handleMouseMoveDesktop = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const mx = ((e.clientX - rect.left) / Math.max(1, rect.width)) * 100;
+      const my = ((e.clientY - rect.top) / Math.max(1, rect.height)) * 100;
+      simRef.current.rawMouseX = Math.max(1, Math.min(99, mx));
+      simRef.current.rawMouseY = Math.max(1, Math.min(99, my));
+    },
+    []
+  );
+
+  const openFakeBrowserModal = useCallback(() => {
     const st = simRef.current;
-    if (st.phase !== 'PLAYING') return;
+    if (st.phase !== 'PLAYING' || st.cursorStunTimer > 0) return;
     soundFX.init();
-    soundFX.playOrbCollect(6);
-    if (!st.antivirusOpen) {
-      st.antivirusOpen = true;
-      setAntivirusOpen(true);
+    soundFX.playOrbCollect(5);
+    st.browserOpen = true;
+    st.browserHp = 100;
+    setBrowserOpen(true);
+    setBrowserHp(100);
+    spawnFloatingText(
+      50,
+      26,
+      'NAVIGATEUR WEB OUVERT ! CLIQUEZ SUR LE FAVORI ANTIVIRUS SHIELD PRO !',
+      '#38bdf8'
+    );
+  }, [spawnFloatingText]);
+
+  const handleBrowserIconClick = useCallback(() => {
+    const st = simRef.current;
+    if (st.cursorStunTimer > 0) return;
+    const now = performance.now();
+    if (now - st.lastBrowserIconClickAt < 550) {
+      openFakeBrowserModal();
+    }
+    st.lastBrowserIconClickAt = now;
+  }, [openFakeBrowserModal]);
+
+  const handleClickAntivirusBookmark = useCallback(() => {
+    const st = simRef.current;
+    if (st.phase !== 'PLAYING' || st.cursorStunTimer > 0) return;
+    soundFX.init();
+    soundFX.playOrbCollect(7);
+    setBrowserPage('ANTIVIRUS_SHIELD');
+    if (!st.downloadStarted) {
+      st.downloadStarted = true;
+      st.downloadProgress = 4;
+      setDownloadStarted(true);
+      setDownloadProgress(4);
       spawnFloatingText(
         50,
-        42,
-        'ANTIVIRUS_SETUP.EXE LANCÉ ! PROTÉGEZ LA FENÊTRE !',
+        35,
+        'TÉLÉCHARGEMENT DE ANTIVIRUS_SHIELD_PRO.EXE LANCÉ !',
         '#34d399'
       );
     }
   }, [spawnFloatingText]);
 
-  const handleAntivirusIconClick = useCallback(() => {
-    const now = performance.now();
+  const handleClickDownloadedFile = useCallback(() => {
     const st = simRef.current;
-    if (now - st.lastAntivirusClickAt < 550) {
-      launchAntivirusInstaller();
+    if (
+      st.phase !== 'PLAYING' ||
+      st.cursorStunTimer > 0 ||
+      st.downloadProgress < 100
+    ) {
+      return;
     }
-    st.lastAntivirusClickAt = now;
-  }, [launchAntivirusInstaller]);
+    soundFX.init();
+    soundFX.playOrbCollect(9);
+    st.antivirusInstalling = true;
+    setAntivirusInstalling(true);
+    spawnFloatingText(
+      50,
+      46,
+      'INSTALLATION FINALE D’ANTIVIRUS SHIELD PRO LANCÉE !',
+      '#10b981'
+    );
+  }, [spawnFloatingText]);
 
   const handleSlapAvatar = useCallback(
     (role: AvatarRole, e: React.MouseEvent) => {
       e.stopPropagation();
       const st = simRef.current;
       if (st.phase !== 'PLAYING') return;
+
+      if (st.cursorStunTimer > 0) {
+        soundFX.init();
+        soundFX.playErrorPopupBeep(2);
+        spawnFloatingText(
+          st.rawMouseX,
+          st.rawMouseY,
+          'CLICS DÉSACTIVÉS (SOURIS ÉTOURDIE) !',
+          '#f43f5e'
+        );
+        return;
+      }
 
       const av = st.avatars.find((a) => a.id === role);
       if (!av) return;
@@ -441,7 +546,7 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
       }
 
       av.stunTimer = 2.0;
-      av.webBreachProgress = 0;
+      av.attackCooldown = 1.6;
       av.slapCount += 1;
 
       const pushAngle =
@@ -449,22 +554,14 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
       av.vx = Math.cos(pushAngle) * 44;
       av.vy = Math.sin(pushAngle) * 44;
 
-      const actionsPool: AvatarAction[] = [
-        'DRAG_TO_TRASH',
-        'ATTACK_SYSTEM32',
-        'RUSH_WEB_BROWSER',
-      ];
-      if (st.antivirusOpen && Math.random() < 0.45) {
-        av.action = 'SABOTAGE_ANTIVIRUS';
+      if (st.browserOpen && Math.random() < 0.5) {
+        av.action = 'ATTACK_BROWSER_WINDOW';
       } else {
         av.action =
-          actionsPool[
-            (av.slapCount + (role === 'CELESTIAL' ? 0 : 1)) %
-              actionsPool.length
-          ];
+          av.slapCount % 2 === 0 ? 'ATTACK_SYSTEM32' : 'DRAG_TO_TRASH';
       }
 
-      av.speech = 'Aïe ! Ce curseur maudit nous frappe ! (Étourdi 2s)';
+      av.speech = 'Aïe ! Claque du curseur ! Étourdi pendant 2 secondes !';
       spawnFloatingText(
         av.x,
         Math.max(12, av.y - 8),
@@ -474,16 +571,6 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
     },
     [spawnFloatingText]
   );
-
-  const handleBoostAntivirus = useCallback(() => {
-    const st = simRef.current;
-    if (st.phase !== 'PLAYING' || !st.antivirusOpen) return;
-    soundFX.init();
-    soundFX.playPickupAmmo();
-    st.antivirusProgress = Math.min(100, st.antivirusProgress + 4.5);
-    setAntivirusProgress(st.antivirusProgress);
-    spawnFloatingText(50, 34, '+4.5% INJECTION NOYAU', '#38bdf8');
-  }, [spawnFloatingText]);
 
   useEffect(() => {
     let rafId: number;
@@ -502,6 +589,10 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
         if (st.floatingEffects[i].age >= 1.15) {
           st.floatingEffects.splice(i, 1);
         }
+      }
+
+      if (st.phase === 'EPILOGUE_SEQUENCE') {
+        return;
       }
 
       if (st.phase === 'INTRO_TRANSITION') {
@@ -562,13 +653,13 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
           soundFX.playPiercingGlitchCrash();
         }
 
-        if (t >= 5.6 && !st.epilogueChordPlayed) {
-          st.epilogueChordPlayed = true;
-          soundFX.init();
-          soundFX.playCinematicChord(2, false);
-        }
-
         setDefeatStageTime(t);
+
+        if (t >= 5.6) {
+          st.phase = 'EPILOGUE_SEQUENCE';
+          setEpilogueSubPhase('CRAFT_AND_ROCKET');
+          setPhase('EPILOGUE_SEQUENCE');
+        }
         return;
       }
 
@@ -597,6 +688,60 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
       st.elapsed += dt;
       st.soundTickTimer += dt;
 
+      if (st.cursorStunTimer > 0) {
+        st.cursorStunTimer = Math.max(0, st.cursorStunTimer - dt);
+      }
+      if (st.hammerShakeTimer > 0) {
+        st.hammerShakeTimer = Math.max(0, st.hammerShakeTimer - dt);
+      }
+
+      st.cursorOffsetX += st.cursorVelX * dt;
+      st.cursorOffsetY += st.cursorVelY * dt;
+      st.cursorVelX *= Math.pow(0.03, dt);
+      st.cursorVelY *= Math.pow(0.03, dt);
+      st.cursorOffsetX *= Math.pow(0.08, dt);
+      st.cursorOffsetY *= Math.pow(0.08, dt);
+
+      const effectiveCursorX = Math.max(
+        2,
+        Math.min(98, st.rawMouseX + st.cursorOffsetX)
+      );
+      const effectiveCursorY = Math.max(
+        2,
+        Math.min(96, st.rawMouseY + st.cursorOffsetY)
+      );
+
+      for (let i = st.bullets.length - 1; i >= 0; i--) {
+        const b = st.bullets[i];
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+
+        const distToCursor = Math.hypot(
+          b.x - effectiveCursorX,
+          b.y - effectiveCursorY
+        );
+        if (distToCursor < 5.5) {
+          st.bullets.splice(i, 1);
+          st.cursorStunTimer = 1.0;
+          const recoilLen = Math.max(1, Math.hypot(b.vx, b.vy));
+          st.cursorVelX = (b.vx / recoilLen) * 85;
+          st.cursorVelY = (b.vy / recoilLen) * 85;
+          soundFX.init();
+          soundFX.playPlayerHurt();
+          spawnFloatingText(
+            effectiveCursorX,
+            effectiveCursorY,
+            '⚡ TIR ÉNERGÉTIQUE ! CLICS DÉSACTIVÉS (1s)',
+            '#f43f5e'
+          );
+          continue;
+        }
+
+        if (b.x < 0 || b.x > 100 || b.y < 0 || b.y > 100) {
+          st.bullets.splice(i, 1);
+        }
+      }
+
       st.icons.forEach((ic) => {
         ic.underAttack = false;
         if (!ic.beingDraggedBy) {
@@ -607,12 +752,12 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
 
       const recycleBin = st.icons.find((ic) => ic.id === 'RECYCLE_BIN')!;
       const system32Icon = st.icons.find((ic) => ic.id === 'SYSTEM32')!;
-      const webBrowserIcon = st.icons.find((ic) => ic.id === 'WEB_BROWSER')!;
-
-      let isAnySabotagingAntivirus = false;
 
       for (const av of st.avatars) {
         av.walkPhase += dt * 11;
+        if (av.attackAnimTimer > 0) {
+          av.attackAnimTimer = Math.max(0, av.attackAnimTimer - dt);
+        }
 
         if (av.stunTimer > 0) {
           av.stunTimer = Math.max(0, av.stunTimer - dt);
@@ -638,22 +783,68 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
           continue;
         }
 
-        if (av.action === 'SABOTAGE_ANTIVIRUS' && !st.antivirusOpen) {
-          av.action = 'ATTACK_SYSTEM32';
+        av.attackCooldown = Math.max(0, av.attackCooldown - dt);
+        const distCursorToAvatar = Math.hypot(
+          effectiveCursorX - av.x,
+          effectiveCursorY - av.y
+        );
+
+        if (av.id === 'CELESTIAL') {
+          if (distCursorToAvatar < 12.5 && av.attackCooldown <= 0) {
+            av.attackCooldown = 1.65;
+            av.attackAnimTimer = 0.45;
+            const pushX = effectiveCursorX - av.x;
+            const pushY = effectiveCursorY - av.y;
+            const pushLen = Math.max(0.5, Math.hypot(pushX, pushY));
+            st.cursorVelX = (pushX / pushLen) * 165;
+            st.cursorVelY = (pushY / pushLen) * 165;
+            st.hammerShakeTimer = 0.45;
+            av.speech = '🔨 COUP DE MARTEAU LOURD ! Dégage de là, curseur !';
+            soundFX.init();
+            soundFX.playBossSlam();
+            spawnFloatingText(
+              av.x,
+              av.y - 8,
+              '🔨 COUP DE MARTEAU ! PROJECTION VIOLENTE !',
+              '#fbbf24'
+            );
+          }
+        } else {
+          if (av.attackCooldown <= 0) {
+            av.attackCooldown = 2.1;
+            av.attackAnimTimer = 0.35;
+            const aimX = effectiveCursorX - av.x;
+            const aimY = effectiveCursorY - av.y;
+            const aimLen = Math.max(1, Math.hypot(aimX, aimY));
+            const shotSpeed = 38;
+            st.bullets.push({
+              id: st.nextEffectId++,
+              x: av.x,
+              y: av.y,
+              vx: (aimX / aimLen) * shotSpeed,
+              vy: (aimY / aimLen) * shotSpeed,
+            });
+            av.facing = aimX >= 0 ? 1 : -1;
+            av.speech = '🔫 Tir énergétique sur ton curseur !';
+            soundFX.init();
+            soundFX.playLightningDash();
+          }
         }
 
-        const moveSpeed = av.carryingIconId ? 13.5 : 18.5;
+        if (av.action === 'ATTACK_BROWSER_WINDOW' && !st.browserOpen) {
+          av.action = 'ATTACK_SYSTEM32';
+        } else if (st.browserOpen && av.id === 'CELESTIAL' && !av.carryingIconId) {
+          av.action = 'ATTACK_BROWSER_WINDOW';
+        }
+
+        const moveSpeed = av.carryingIconId ? 13.5 : 17.5;
 
         if (av.action === 'DRAG_TO_TRASH') {
-          const targetableId: DesktopIconId =
-            av.id === 'CELESTIAL' ? 'THIS_PC' : 'ANTIVIRUS';
           const targetIcon =
-            st.icons.find(
-              (ic) => ic.id === (av.carryingIconId || targetableId)
-            ) || st.icons[0];
+            st.icons.find((ic) => ic.id === 'THIS_PC') || st.icons[0];
 
           if (!av.carryingIconId) {
-            av.speech = `Je vais jeter ${targetIcon.label} dans la Corbeille !`;
+            av.speech = `Je jette ${targetIcon.label} à la Corbeille !`;
             const dx = targetIcon.x - av.x;
             const dy = targetIcon.y - av.y;
             const dist = Math.hypot(dx, dy);
@@ -668,9 +859,6 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
             }
           } else {
             const carried = st.icons.find((ic) => ic.id === av.carryingIconId);
-            av.speech = `Direction la Corbeille avec ${
-              carried?.label || 'l’icône'
-            } !`;
             const dx = recycleBin.x - av.x;
             const dy = recycleBin.y - av.y;
             const dist = Math.hypot(dx, dy);
@@ -690,49 +878,20 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
               }
               av.carryingIconId = null;
               recycleBin.underAttack = true;
-              st.corruption = Math.min(100, st.corruption + 16);
+              st.corruption = Math.min(100, st.corruption + 15);
               soundFX.playBossSlam();
               spawnFloatingText(
                 recycleBin.x + 6,
                 recycleBin.y,
-                'ICÔNE JETÉE ! +16% CORRUPTION',
+                'ICÔNE JETÉE ! +15% CORRUPTION',
                 '#f43f5e'
               );
-              av.action =
-                st.corruption > 40 ? 'RUSH_WEB_BROWSER' : 'ATTACK_SYSTEM32';
+              av.action = 'ATTACK_SYSTEM32';
             }
           }
-        } else if (av.action === 'ATTACK_SYSTEM32') {
-          av.speech = 'Frappons System32 pour corrompre le PC !';
-          const dx = system32Icon.x - 4 - av.x;
-          const dy = system32Icon.y - av.y;
-          const dist = Math.hypot(dx, dy);
-          if (dist > 3.5) {
-            av.x += (dx / dist) * moveSpeed * dt;
-            av.y += (dy / dist) * moveSpeed * dt;
-            av.facing = dx >= 0 ? 1 : -1;
-          } else {
-            av.facing = 1;
-            av.slashPhase += dt * 14;
-            system32Icon.underAttack = true;
-            st.corruption = Math.min(100, st.corruption + dt * 4.4);
-            if (st.soundTickTimer >= 0.45) {
-              st.soundTickTimer = 0;
-              soundFX.playSwordSwing();
-              spawnFloatingText(
-                system32Icon.x - 4,
-                system32Icon.y - 4,
-                'CORRUPTION SYSTEM32 !',
-                '#fb7185'
-              );
-            }
-            if (st.elapsed > 10 && Math.random() < dt * 0.14) {
-              av.action = 'RUSH_WEB_BROWSER';
-            }
-          }
-        } else if (av.action === 'SABOTAGE_ANTIVIRUS') {
-          av.speech = 'Bloquez l’installation de Antivirus_Setup.exe !';
-          const targetX = 50 + (av.id === 'CELESTIAL' ? -14 : 14);
+        } else if (av.action === 'ATTACK_BROWSER_WINDOW') {
+          av.speech = 'Fermons cette fenêtre de Navigateur Web !';
+          const targetX = 50 + (av.id === 'CELESTIAL' ? -22 : 22);
           const targetY = 48;
           const dx = targetX - av.x;
           const dy = targetY - av.y;
@@ -742,43 +901,54 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
             av.y += (dy / dist) * moveSpeed * dt;
             av.facing = dx >= 0 ? 1 : -1;
           } else {
-            isAnySabotagingAntivirus = true;
-            av.slashPhase += dt * 15;
-            st.corruption = Math.min(100, st.corruption + dt * 2.6);
+            av.attackAnimTimer = 0.25;
+            st.browserHp = Math.max(0, st.browserHp - dt * 16);
+            st.corruption = Math.min(100, st.corruption + dt * 2.2);
+            if (st.browserHp <= 0) {
+              st.browserOpen = false;
+              setBrowserOpen(false);
+              soundFX.playErrorPopupBeep(4);
+              spawnFloatingText(
+                50,
+                32,
+                'FENÊTRE DU NAVIGATEUR FERMÉE PAR LES AVATARS ! ROUVREZ-LA !',
+                '#f43f5e'
+              );
+              av.action = 'ATTACK_SYSTEM32';
+            }
           }
-        } else if (av.action === 'RUSH_WEB_BROWSER') {
-          av.speech = 'Navigateur Web en vue ! Fuyons sur Internet !';
-          const dx = webBrowserIcon.x - 4 - av.x;
-          const dy = webBrowserIcon.y - av.y;
+        } else {
+          av.speech = 'Posons la bombe sur System32 !';
+          const dx = system32Icon.x - 4 - av.x;
+          const dy = system32Icon.y - av.y;
           const dist = Math.hypot(dx, dy);
           if (dist > 3.5) {
-            av.x += (dx / dist) * (moveSpeed * 0.92) * dt;
-            av.y += (dy / dist) * (moveSpeed * 0.92) * dt;
+            av.x += (dx / dist) * moveSpeed * dt;
+            av.y += (dy / dist) * moveSpeed * dt;
             av.facing = dx >= 0 ? 1 : -1;
           } else {
             av.facing = 1;
-            webBrowserIcon.underAttack = true;
-            av.webBreachProgress = Math.min(
-              100,
-              av.webBreachProgress + dt * 21
-            );
-            if (av.webBreachProgress >= 100) {
-              st.phase = 'DEFEAT';
-              st.defeatTimer = 0;
-              setDefeatReason('WEB');
-              setPhase('DEFEAT');
-              soundFX.playVoidDimensionSeal();
-              return;
+            av.attackAnimTimer = 0.25;
+            system32Icon.underAttack = true;
+            st.corruption = Math.min(100, st.corruption + dt * 4.2);
+            if (st.soundTickTimer >= 0.5) {
+              st.soundTickTimer = 0;
+              soundFX.playSwordSwing();
             }
           }
         }
       }
 
-      st.antivirusJammed = isAnySabotagingAntivirus;
+      if (st.downloadStarted && st.downloadProgress < 100) {
+        const dlSpeed = st.browserOpen ? 19.5 : 8.0;
+        st.downloadProgress = Math.min(100, st.downloadProgress + dt * dlSpeed);
+      }
 
-      if (st.antivirusOpen) {
-        const rate = isAnySabotagingAntivirus ? 1.4 : 6.8;
-        st.antivirusProgress = Math.min(100, st.antivirusProgress + dt * rate);
+      if (st.antivirusInstalling) {
+        st.antivirusProgress = Math.min(
+          100,
+          st.antivirusProgress + dt * 15.5
+        );
         if (st.antivirusProgress >= 100) {
           st.phase = 'VICTORY';
           st.victoryTimer = 0;
@@ -801,16 +971,35 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
       }
 
       setCorruption(st.corruption);
+      setBrowserHp(st.browserHp);
+      setDownloadProgress(st.downloadProgress);
       setAntivirusProgress(st.antivirusProgress);
-      setAntivirusJammed(st.antivirusJammed);
       setIcons(st.icons.map((ic) => ({ ...ic })));
       setAvatars(st.avatars.map((av) => ({ ...av })));
+      setEnergyBullets([...st.bullets]);
       setFloatingEffects([...st.floatingEffects]);
+      setHammerShakeTimer(st.hammerShakeTimer);
+      setCursorDisplay({
+        x: effectiveCursorX,
+        y: effectiveCursorY,
+        stunTimer: st.cursorStunTimer,
+      });
     };
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
   }, [spawnFloatingText]);
+
+  if (phase === 'EPILOGUE_SEQUENCE') {
+    return (
+      <EpilogueMinecraftSequence
+        initialSubPhase={epilogueSubPhase}
+        triggerKey={triggerKey}
+        onReturnToMainMenu={onReturnToMainMenu}
+        onRestartFullMiniGame={handleRestartMiniGame}
+      />
+    );
+  }
 
   if (phase === 'INTRO_TRANSITION' && transitionStageTime < 1.35) {
     return (
@@ -827,7 +1016,7 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
     );
   }
 
-  if (phase === 'DEFEAT' && defeatStageTime >= 4.25 && defeatStageTime < 5.6) {
+  if (phase === 'DEFEAT' && defeatStageTime >= 4.25) {
     if (defeatStageTime < 4.65) {
       return (
         <div className="fixed inset-0 z-[120] bg-black cursor-none select-none" />
@@ -835,311 +1024,20 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
     }
 
     return (
-      <div className="fixed inset-0 z-[120] bg-[#0052a3] text-white font-mono flex flex-col justify-center p-8 sm:p-16 select-none">
+      <div className="fixed inset-0 z-[120] bg-[#0052a3] text-white font-mono flex flex-col justify-center p-8 sm:p-16 select-none cursor-none">
         <div className="max-w-3xl space-y-5">
           <div className="text-7xl sm:text-8xl font-light">:(</div>
           <h1 className="text-xl sm:text-2xl font-bold leading-relaxed">
-            DETONATION CRITIQUE SUR C:\WINDOWS\SYSTEM32 — LE NOYAU LOCAL A ÉTÉ DÉTRUIT.
+            DÉTONATION CRITIQUE SUR C:\WINDOWS\SYSTEM32 — LE FAUX PC A EXPLOSÉ.
           </h1>
           <div className="space-y-1 text-sm sm:text-base text-blue-100">
             <p className="font-bold text-amber-300">
-              TRANSFERT DES ENTITÉS VERS LE RÉSEAU MONDIAL EN COURS... 100%
+              FUITE DES AVATARS VERS LA PLAINE OPEN-WORLD DU WEB PROFOND... 100%
             </p>
             <p className="text-xs opacity-85 pt-2">
-              STOP CODE : SYSTEM32_DIGITAL_BOMB_0xDEADBEEF (
-              {defeatReason === 'WEB'
-                ? 'WEB_GATEWAY_BREACHED'
-                : 'CORRUPTION_OVERFLOW'}
-              )
+              STOP CODE : SYSTEM32_BOMB_ESCAPE_0xDEADBEEF ({defeatReason})
             </p>
           </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (phase === 'DEFEAT' && defeatStageTime >= 5.6) {
-    const epilogueTime = defeatStageTime - 5.6;
-
-    return (
-      <div className="fixed inset-0 z-[120] bg-[#03010a] text-white font-mono select-none overflow-hidden flex flex-col justify-between">
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background:
-              'radial-gradient(circle at 50% 34%, rgba(56, 189, 248, 0.24) 0%, rgba(168, 85, 247, 0.22) 32%, rgba(3, 1, 10, 0.98) 75%)',
-          }}
-        />
-
-        <div
-          className="absolute inset-x-0 bottom-0 h-[56%] pointer-events-none opacity-65"
-          style={{
-            backgroundImage:
-              'linear-gradient(rgba(56, 189, 248, 0.4) 1px, transparent 1px), linear-gradient(90deg, rgba(217, 70, 239, 0.35) 1px, transparent 1px)',
-            backgroundSize: '54px 36px',
-            transform: `perspective(360px) rotateX(68deg) translateY(${
-              (epilogueTime * 48) % 36
-            }px) scale(1.7)`,
-            transformOrigin: 'center top',
-          }}
-        />
-
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          {CYBER_WEB_NODES.map((node, idx) => {
-            const floatY = Math.sin(epilogueTime * 2.2 + idx * 1.4) * 10;
-            return (
-              <div
-                key={node.id}
-                style={{
-                  left: node.left,
-                  top: node.top,
-                  transform: `translateY(${floatY}px)`,
-                  borderColor: node.color,
-                }}
-                className="absolute w-56 sm:w-64 rounded-xl bg-slate-950/85 border backdrop-blur-md p-3 shadow-[0_0_30px_rgba(56,189,248,0.25)]"
-              >
-                <div className="flex items-center justify-between text-[9px] font-bold text-slate-400 border-b border-slate-800 pb-1 mb-1.5">
-                  <span className="flex items-center gap-1 text-cyan-300">
-                    <Server className="w-3 h-3" />
-                    {node.title}
-                  </span>
-                  <span className="text-rose-400 animate-pulse">[CIBLE]</span>
-                </div>
-                <div className="text-[10px] text-slate-300 truncate mb-1">
-                  {node.url}
-                </div>
-                <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-cyan-400 via-fuchsia-500 to-rose-500"
-                    style={{
-                      width: `${45 + ((Math.floor(epilogueTime * 25) + idx * 23) % 55)}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="relative z-20 pt-6 px-6 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-rose-950/90 border border-rose-500/60 text-rose-300 text-xs font-black uppercase tracking-[0.25em]">
-            <Globe className="w-3.5 h-3.5 text-rose-400 animate-spin" />
-            ÉPILOGUE WEB • HORIZON CYBERNÉTIQUE INFINI
-          </div>
-        </div>
-
-        <div className="relative z-20 flex-1 flex flex-col items-center justify-center px-4">
-          <div className="relative flex items-center justify-center gap-12 sm:gap-20 mb-6">
-            <div
-              className="flex flex-col items-center"
-              style={{
-                transform: `translateY(${Math.sin(epilogueTime * 3) * 6}px)`,
-              }}
-            >
-              <svg
-                viewBox="0 0 100 130"
-                className="w-28 h-36 sm:w-32 sm:h-40 drop-shadow-[0_0_28px_rgba(250,204,21,0.85)]"
-              >
-                <circle
-                  cx="50"
-                  cy="42"
-                  r="34"
-                  fill="none"
-                  stroke="#fde047"
-                  strokeWidth="2.5"
-                  strokeDasharray="6 4"
-                />
-                <path
-                  d="M32 48 L16 112 L48 102 Z"
-                  fill="#fef08a"
-                  opacity="0.45"
-                />
-                <rect
-                  x="38"
-                  y="76"
-                  width="9"
-                  height="32"
-                  rx="4"
-                  fill="#0f172a"
-                  stroke="#fde047"
-                  strokeWidth="2"
-                />
-                <rect
-                  x="53"
-                  y="76"
-                  width="9"
-                  height="32"
-                  rx="4"
-                  fill="#0f172a"
-                  stroke="#fde047"
-                  strokeWidth="2"
-                />
-                <rect
-                  x="34"
-                  y="42"
-                  width="32"
-                  height="36"
-                  rx="7"
-                  fill="#020617"
-                  stroke="#fef08a"
-                  strokeWidth="2.5"
-                />
-                <rect
-                  x="36"
-                  y="16"
-                  width="28"
-                  height="25"
-                  rx="6"
-                  fill="#020617"
-                  stroke="#38bdf8"
-                  strokeWidth="2.5"
-                />
-                <rect
-                  x="42"
-                  y="24"
-                  width="16"
-                  height="4"
-                  fill="#38bdf8"
-                />
-                <rect
-                  x="72"
-                  y="10"
-                  width="6"
-                  height="64"
-                  rx="3"
-                  fill="#fef08a"
-                  stroke="#38bdf8"
-                  strokeWidth="1.5"
-                />
-              </svg>
-              <span className="mt-1 text-[10px] font-black uppercase tracking-widest text-amber-300">
-                Silhouette Céleste
-              </span>
-            </div>
-
-            <div
-              className="flex flex-col items-center"
-              style={{
-                transform: `translateY(${Math.cos(epilogueTime * 3) * 6}px)`,
-              }}
-            >
-              <svg
-                viewBox="0 0 100 130"
-                className="w-28 h-36 sm:w-32 sm:h-40 drop-shadow-[0_0_28px_rgba(244,63,94,0.85)]"
-              >
-                <circle
-                  cx="50"
-                  cy="42"
-                  r="34"
-                  fill="none"
-                  stroke="#f43f5e"
-                  strokeWidth="2.5"
-                  strokeDasharray="8 4"
-                />
-                <path
-                  d="M68 48 L84 112 L52 102 Z"
-                  fill="#e11d48"
-                  opacity="0.45"
-                />
-                <rect
-                  x="38"
-                  y="76"
-                  width="9"
-                  height="32"
-                  rx="4"
-                  fill="#090214"
-                  stroke="#f43f5e"
-                  strokeWidth="2"
-                />
-                <rect
-                  x="53"
-                  y="76"
-                  width="9"
-                  height="32"
-                  rx="4"
-                  fill="#090214"
-                  stroke="#f43f5e"
-                  strokeWidth="2"
-                />
-                <rect
-                  x="34"
-                  y="42"
-                  width="32"
-                  height="36"
-                  rx="7"
-                  fill="#05010a"
-                  stroke="#f43f5e"
-                  strokeWidth="2.5"
-                />
-                <rect
-                  x="36"
-                  y="16"
-                  width="28"
-                  height="25"
-                  rx="6"
-                  fill="#05010a"
-                  stroke="#a855f7"
-                  strokeWidth="2.5"
-                />
-                <rect
-                  x="42"
-                  y="24"
-                  width="16"
-                  height="4"
-                  fill="#f43f5e"
-                />
-                <rect
-                  x="22"
-                  y="10"
-                  width="6"
-                  height="64"
-                  rx="3"
-                  fill="#f43f5e"
-                  stroke="#a855f7"
-                  strokeWidth="1.5"
-                />
-              </svg>
-              <span className="mt-1 text-[10px] font-black uppercase tracking-widest text-rose-400">
-                Silhouette du Néant
-              </span>
-            </div>
-          </div>
-
-          <div className="max-w-3xl w-full bg-slate-950/90 border-2 border-rose-500/80 rounded-3xl p-6 sm:p-8 text-center shadow-[0_0_90px_rgba(244,63,94,0.45)] backdrop-blur-xl">
-            <p className="text-xs sm:text-sm text-cyan-300 font-sans mb-3">
-              Traversant les dorsales océaniques de données, les grappes de serveurs et les pages du Web mondial, les deux entités scrutent l’horizon cybernétique à la recherche de nouveaux mondes et serveurs à anéantir...
-            </p>
-            <h1 className="text-xl sm:text-3xl font-black text-white tracking-wider uppercase drop-shadow-[0_0_20px_rgba(244,63,94,0.8)]">
-              ILS SE SONT ÉCHAPPÉS. AUCUN SYSTÈME N&apos;EST EN SÉCURITÉ.
-            </h1>
-
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-4">
-              <button
-                type="button"
-                onClick={handleRestartMiniGame}
-                className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-rose-500 via-fuchsia-500 to-amber-400 hover:from-rose-400 hover:to-amber-300 text-slate-950 font-black text-xs sm:text-sm flex items-center gap-2 shadow-[0_0_30px_rgba(244,63,94,0.5)] cursor-pointer transition-all"
-              >
-                <RotateCcw className="w-4 h-4" />
-                Relancer la Séquence
-              </button>
-              <button
-                type="button"
-                onClick={onReturnToMainMenu}
-                className="px-6 py-3.5 rounded-2xl bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer transition-all"
-              >
-                <Home className="w-4 h-4" />
-                Retour au Menu Principal
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="relative z-20 px-6 py-3 bg-slate-950/90 border-t border-rose-500/30 flex items-center justify-between text-[11px] text-slate-400">
-          <span className="flex items-center gap-2 text-rose-400 font-bold">
-            <Cpu className="w-3.5 h-3.5" />
-            PROTOCOLE D’INVASION RÉSEAU : ACTIF SUR 4,294,967,295 NOEUDS
-          </span>
-          <span>SYSTEM32 : ANÉANTI</span>
         </div>
       </div>
     );
@@ -1151,6 +1049,7 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
     phase === 'INTRO_TRANSITION' &&
     transitionStageTime >= 2.15 &&
     transitionStageTime < 2.85;
+  const isHammerShake = hammerShakeTimer > 0;
 
   const bombCountdown =
     phase === 'DEFEAT'
@@ -1159,7 +1058,8 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
 
   return (
     <div
-      className="fixed inset-0 z-50 select-none overflow-hidden font-sans flex flex-col justify-between"
+      onMouseMove={handleMouseMoveDesktop}
+      className="fixed inset-0 z-50 select-none overflow-hidden font-sans flex flex-col justify-between cursor-none"
       style={{
         background:
           'radial-gradient(circle at 75% 25%, #1d4ed8 0%, #0f172a 48%, #020617 100%)',
@@ -1170,6 +1070,10 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
           : isTransitionImpactShake
           ? `translate(${Math.sin(transitionStageTime * 85) * 12}px, ${
               Math.cos(transitionStageTime * 78) * 14
+            }px)`
+          : isHammerShake
+          ? `translate(${Math.sin(hammerShakeTimer * 120) * 14}px, ${
+              Math.cos(hammerShakeTimer * 110) * 12
             }px)`
           : undefined,
         filter: isBombExplosionPhase
@@ -1213,16 +1117,14 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
             <g stroke="rgba(255,255,255,0.65)" strokeWidth="2.5" fill="none">
               <path d="M320 265 L210 195 L150 205" />
               <path d="M320 265 L240 340 L170 385" />
-              <path d="M320 265 L350 180 L330 120" />
               <path d="M480 265 L590 190 L660 175" />
               <path d="M480 265 L575 345 L645 390" />
-              <path d="M480 265 L450 360 L470 420" />
             </g>
           </svg>
         </div>
       )}
 
-      <div className="relative z-30 mx-auto mt-3 w-[95vw] max-w-4xl bg-slate-950/90 backdrop-blur-xl border border-white/15 rounded-2xl px-4 py-2.5 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
+      <div className="relative z-30 mx-auto mt-3 w-[95vw] max-w-5xl bg-slate-950/90 backdrop-blur-xl border border-white/15 rounded-2xl px-4 py-2.5 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <div
             className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${
@@ -1267,8 +1169,8 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
             <span>Clic Gauche sur Avatar : Claque + Étourdir (2s)</span>
           </span>
           <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-emerald-500/40 text-emerald-200 flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Double-Clic sur Antivirus_Setup.exe : Confiner &amp; Enchaîner</span>
+            <Globe className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Double-Clic sur « Navigateur Web » → Favori « Antivirus Shield Pro »</span>
           </span>
         </div>
       </div>
@@ -1276,7 +1178,8 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
       <div className="relative flex-1 w-full overflow-hidden">
         {phase === 'INTRO_TRANSITION' &&
           transitionStageTime >= 1.35 &&
-          transitionStageTime < 2.95 && (() => {
+          transitionStageTime < 2.95 &&
+          (() => {
             const winProgress = (transitionStageTime - 1.35) / 1.6;
             const shrinkFactor =
               winProgress < 0.55
@@ -1290,7 +1193,8 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
                   transform: `translate(-50%, -50%) scale(${shrinkFactor}) rotate(${
                     winProgress > 0.55 ? (winProgress - 0.55) * -14 : 0
                   }deg)`,
-                  opacity: winProgress > 0.9 ? Math.max(0, (1 - winProgress) * 10) : 1,
+                  opacity:
+                    winProgress > 0.9 ? Math.max(0, (1 - winProgress) * 10) : 1,
                 }}
                 className="absolute left-1/2 top-1/2 z-[56] w-[62vw] h-[60vh] rounded-2xl border-4 border-orange-500 shadow-[0_0_110px_rgba(249,115,22,0.95),inset_0_0_60px_rgba(239,68,68,0.85)] pointer-events-none flex flex-col justify-between overflow-visible"
               >
@@ -1343,16 +1247,9 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
           })()}
 
         {icons.map((ic) => {
-          const isAntivirus = ic.id === 'ANTIVIRUS';
           const isBrowser = ic.id === 'WEB_BROWSER';
           const isSystem32 = ic.id === 'SYSTEM32';
           const isRecycle = ic.id === 'RECYCLE_BIN';
-
-          const breachingAvatar = isBrowser
-            ? avatars.find(
-                (a) => a.action === 'RUSH_WEB_BROWSER' && a.webBreachProgress > 0
-              )
-            : undefined;
 
           const hasPlantedBomb =
             isSystem32 &&
@@ -1364,13 +1261,13 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
             <div
               key={ic.id}
               onDoubleClick={() => {
-                if (isAntivirus) {
-                  launchAntivirusInstaller();
+                if (isBrowser) {
+                  openFakeBrowserModal();
                 }
               }}
               onClick={() => {
-                if (isAntivirus) {
-                  handleAntivirusIconClick();
+                if (isBrowser) {
+                  handleBrowserIconClick();
                 }
               }}
               style={{
@@ -1382,9 +1279,9 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
                     : ''
                 }`,
               }}
-              className={`absolute z-20 w-24 p-2 rounded-xl flex flex-col items-center text-center transition-transform cursor-pointer select-none ${
-                isAntivirus && !antivirusOpen
-                  ? 'bg-emerald-500/20 border-2 border-emerald-400 shadow-[0_0_25px_rgba(16,185,129,0.5)] hover:bg-emerald-500/30'
+              className={`absolute z-20 w-24 p-2 rounded-xl flex flex-col items-center text-center transition-transform cursor-none select-none ${
+                isBrowser && !browserOpen
+                  ? 'bg-cyan-500/20 border-2 border-cyan-400 shadow-[0_0_25px_rgba(56,189,248,0.5)] hover:bg-cyan-500/30'
                   : ic.underAttack || hasPlantedBomb
                   ? 'bg-rose-500/35 border-2 border-rose-500 shadow-[0_0_35px_rgba(244,63,94,0.85)]'
                   : 'hover:bg-white/15 border border-transparent hover:border-white/25'
@@ -1398,22 +1295,19 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
                     ? 'bg-gradient-to-br from-slate-600 to-slate-800 text-cyan-200 border border-white/20'
                     : isBrowser
                     ? 'bg-gradient-to-br from-cyan-400 via-blue-500 to-indigo-600 text-white'
-                    : isSystem32
-                    ? 'bg-gradient-to-br from-amber-400 to-orange-600 text-slate-950'
-                    : 'bg-gradient-to-br from-emerald-400 to-teal-600 text-slate-950'
+                    : 'bg-gradient-to-br from-amber-400 to-orange-600 text-slate-950'
                 }`}
               >
                 {ic.id === 'THIS_PC' && <Monitor className="w-6 h-6" />}
                 {isRecycle && <Trash2 className="w-6 h-6" />}
                 {isBrowser && <Globe className="w-6 h-6" />}
                 {isSystem32 && <FolderCog className="w-6 h-6" />}
-                {isAntivirus && <ShieldCheck className="w-6 h-6" />}
               </div>
               <span className="text-[11px] font-bold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] leading-tight break-words">
                 {ic.label}
               </span>
-              {isAntivirus && !antivirusOpen && phase === 'PLAYING' && (
-                <span className="mt-1 px-1.5 py-0.5 rounded bg-emerald-400 text-slate-950 font-black text-[9px] uppercase animate-bounce">
+              {isBrowser && !browserOpen && phase === 'PLAYING' && (
+                <span className="mt-1 px-1.5 py-0.5 rounded bg-cyan-400 text-slate-950 font-black text-[9px] uppercase animate-bounce">
                   Double-Clic !
                 </span>
               )}
@@ -1432,60 +1326,159 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
                   </div>
                 </div>
               )}
-              {breachingAvatar && (
-                <div className="w-full mt-1 bg-slate-950/90 rounded-full h-2 border border-rose-500 overflow-hidden">
-                  <div
-                    className="h-full bg-rose-500"
-                    style={{ width: `${breachingAvatar.webBreachProgress}%` }}
-                  />
-                </div>
-              )}
             </div>
           );
         })}
 
-        {antivirusOpen && phase === 'PLAYING' && (
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-30 w-[90vw] max-w-md bg-slate-900/95 border-2 border-emerald-400/80 rounded-2xl shadow-[0_0_60px_rgba(16,185,129,0.4)] backdrop-blur-xl overflow-hidden">
-            <div className="bg-gradient-to-r from-emerald-600 to-teal-700 px-4 py-2.5 flex items-center justify-between text-xs font-black text-white">
+        {browserOpen && phase === 'PLAYING' && (
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-30 w-[92vw] max-w-2xl bg-slate-900/95 border-2 border-cyan-400/80 rounded-2xl shadow-[0_0_70px_rgba(56,189,248,0.4)] backdrop-blur-xl overflow-hidden cursor-none">
+            <div className="bg-slate-950 px-4 py-2 border-b border-slate-800 flex items-center justify-between text-xs font-bold text-white">
               <span className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4" />
-                Antivirus_Setup.exe — Verrouillage Noyau
+                <Globe className="w-4 h-4 text-cyan-400" />
+                Aetheria Web Browser
               </span>
-              <span className="font-mono">{Math.round(antivirusProgress)}%</span>
-            </div>
-            <div className="p-5 space-y-4">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-300 font-semibold">
-                  {antivirusJammed
-                    ? '⚠️ SABOTAGE EN COURS ! Cliquez sur l’avatar pour le repousser !'
-                    : 'Chargement des chaînes de confinement du noyau...'}
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] font-mono text-amber-300">
+                  Intégrité Fenêtre : {Math.round(browserHp)}%
                 </span>
-              </div>
-
-              <div className="w-full h-4 bg-slate-950 rounded-full p-0.5 border border-emerald-500/50 overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all duration-100 ${
-                    antivirusJammed
-                      ? 'bg-amber-400 animate-pulse'
-                      : 'bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400'
-                  }`}
-                  style={{ width: `${Math.min(100, antivirusProgress)}%` }}
-                />
-              </div>
-
-              <div className="flex items-center justify-between gap-3">
                 <button
                   type="button"
-                  onClick={handleBoostAntivirus}
-                  className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg cursor-pointer transition-transform active:scale-95"
+                  onClick={() => {
+                    if (simRef.current.cursorStunTimer > 0) return;
+                    simRef.current.browserOpen = false;
+                    setBrowserOpen(false);
+                  }}
+                  className="p-1 rounded bg-rose-600/80 hover:bg-rose-500 text-white cursor-none"
                 >
-                  <Zap className="w-4 h-4" />
-                  Accélérer l’Installation (+4.5%)
+                  <X className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
+
+            <div className="bg-slate-900 px-3 py-2 border-b border-slate-800 flex items-center gap-2">
+              <div className="flex-1 px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-xs font-mono text-cyan-300 truncate">
+                {browserPage === 'ANTIVIRUS_SHIELD'
+                  ? 'SECURE_NODE :: antivirus-shield-pro.aetheria/download'
+                  : 'PORTAL_NODE :: accueil.aetheria-web.local'}
+              </div>
+            </div>
+
+            <div className="bg-slate-950/90 px-3 py-1.5 border-b border-slate-800 flex items-center gap-2 text-[11px]">
+              <span className="text-slate-400 font-bold uppercase text-[10px]">
+                Favoris :
+              </span>
+              <button
+                type="button"
+                onClick={handleClickAntivirusBookmark}
+                className="px-3 py-1 rounded-lg bg-emerald-500/25 hover:bg-emerald-500/40 border border-emerald-400 text-emerald-200 font-black flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.4)] cursor-none animate-pulse"
+              >
+                <Star className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
+                <span>Antivirus Shield Pro</span>
+              </button>
+              <span className="px-2.5 py-1 rounded-lg bg-slate-900 text-slate-500 flex items-center gap-1">
+                <ExternalLink className="w-3 h-3" />
+                Cloud Aetheria
+              </span>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {browserPage === 'HOME' ? (
+                <div className="text-center py-6 space-y-2">
+                  <Globe className="w-10 h-10 text-cyan-400 mx-auto" />
+                  <h3 className="text-base font-black text-white">
+                    Portail Intranet Aetheria
+                  </h3>
+                  <p className="text-xs text-slate-300">
+                    Cliquez sur le favori <strong className="text-emerald-300">« Antivirus Shield Pro »</strong> dans la barre de favoris ci-dessus pour télécharger l’exécutable de confinement !
+                  </p>
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl bg-slate-950 border border-emerald-500/40 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-black text-emerald-300 flex items-center gap-2">
+                      <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                      Antivirus Shield Pro — Édition Noyau
+                    </span>
+                    <span className="text-xs font-mono text-amber-300">
+                      v11.02
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300">
+                    {downloadProgress < 100
+                      ? 'Téléchargement de Antivirus_Shield_Pro_Setup.exe en cours... Protégez la fenêtre contre les avatars !'
+                      : 'Téléchargement terminé à 100% ! Cliquez sur le fichier dans la barre de téléchargement ci-dessous pour lancer l’installation finale !'}
+                  </p>
+                </div>
+              )}
+
+              {downloadStarted && (
+                <div className="p-3 rounded-xl bg-slate-950 border-2 border-cyan-500/50 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                    <Download className="w-5 h-5 text-cyan-400 shrink-0" />
+                    <div className="flex-1">
+                      <div className="text-xs font-bold text-white">
+                        Antivirus_Shield_Pro_Setup.exe ({Math.round(downloadProgress)}%)
+                      </div>
+                      <div className="w-48 h-2 bg-slate-800 rounded-full overflow-hidden mt-1">
+                        <div
+                          className="h-full bg-gradient-to-r from-cyan-400 to-emerald-400"
+                          style={{ width: `${downloadProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={downloadProgress < 100 || antivirusInstalling}
+                    onClick={handleClickDownloadedFile}
+                    className={`px-4 py-2 rounded-xl font-black text-xs cursor-none ${
+                      downloadProgress >= 100 && !antivirusInstalling
+                        ? 'bg-emerald-400 hover:bg-emerald-300 text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.7)] animate-bounce'
+                        : 'bg-slate-800 text-slate-500'
+                    }`}
+                  >
+                    {antivirusInstalling
+                      ? 'Installation en cours...'
+                      : downloadProgress >= 100
+                      ? '▶ Cliquer pour Installer'
+                      : 'Téléchargement...'}
+                  </button>
+                </div>
+              )}
+
+              {antivirusInstalling && (
+                <div className="p-3.5 rounded-xl bg-emerald-950/80 border-2 border-emerald-400 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-black text-emerald-200">
+                    <span className="flex items-center gap-1.5">
+                      <Zap className="w-4 h-4 text-amber-300" />
+                      INSTALLATION FINALE D’ANTIVIRUS SHIELD PRO...
+                    </span>
+                    <span className="font-mono">{Math.round(antivirusProgress)}%</span>
+                  </div>
+                  <div className="w-full h-3 bg-slate-950 rounded-full overflow-hidden p-0.5">
+                    <div
+                      className="h-full bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 rounded-full"
+                      style={{ width: `${antivirusProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
+
+        {energyBullets.map((b) => (
+          <div
+            key={b.id}
+            style={{
+              left: `${b.x}%`,
+              top: `${b.y}%`,
+              transform: 'translate(-50%, -50%)',
+            }}
+            className="absolute z-40 w-5 h-5 rounded-full bg-fuchsia-500 border-2 border-white shadow-[0_0_18px_rgba(217,70,239,1)] pointer-events-none"
+          />
+        ))}
 
         {phase !== 'VICTORY' &&
           avatars.map((av) => {
@@ -1501,15 +1494,11 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
               if (transitionStageTime < 1.65) {
                 return null;
               }
-              const dropP = Math.min(
-                1,
-                (transitionStageTime - 1.65) / 0.52
-              );
+              const dropP = Math.min(1, (transitionStageTime - 1.65) / 0.52);
               const bounce =
                 transitionStageTime >= 2.17
                   ? Math.sin(
-                      Math.min(1, (transitionStageTime - 2.17) / 0.45) *
-                        Math.PI
+                      Math.min(1, (transitionStageTime - 2.17) / 0.45) * Math.PI
                     ) * -6
                   : 0;
               displayX = isCelestial ? 42 : 58;
@@ -1522,12 +1511,9 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
             } else if (phase === 'DEFEAT') {
               if (defeatStageTime < 0.75) {
                 const p = defeatStageTime / 0.75;
-                displayX =
-                  av.x + ((isCelestial ? 82 : 86) - av.x) * p;
-                displayY =
-                  av.y + ((isCelestial ? 64 : 71) - av.y) * p;
-                statusSpeech =
-                  'Vite ! Déposons la bombe numérique sur System32 !';
+                displayX = av.x + ((isCelestial ? 82 : 86) - av.x) * p;
+                displayY = av.y + ((isCelestial ? 64 : 71) - av.y) * p;
+                statusSpeech = 'Vite ! Déposons la bombe numérique sur System32 !';
               } else if (defeatStageTime < 1.65) {
                 displayX = isCelestial ? 82 : 86;
                 displayY = isCelestial ? 64 : 71;
@@ -1539,7 +1525,7 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
                 const startY = isCelestial ? 64 : 71;
                 displayX = startX + (89 - startX) * p;
                 displayY =
-                  startY + (18 - startY) * p - Math.sin(p * Math.PI) * 12;
+                  startY + (20 - startY) * p - Math.sin(p * Math.PI) * 12;
                 avatarScale = Math.max(0.05, 1 - Math.max(0, (p - 0.55) * 2.1));
                 statusSpeech = 'PLONGEON DANS LE NAVIGATEUR WEB !';
               } else {
@@ -1550,8 +1536,8 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
             const legSwing = isStunned
               ? 0
               : Math.sin(av.walkPhase + defeatStageTime * 16) * 18;
-            const swordSwing =
-              av.slashPhase > 0 ? Math.sin(av.slashPhase) * 38 : 12;
+            const weaponAngle =
+              av.attackAnimTimer > 0 ? Math.sin(av.attackAnimTimer * 24) * 55 : 0;
 
             return (
               <div
@@ -1562,8 +1548,7 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
                   top: `${displayY}%`,
                   transform: `translate(-50%, -50%) scale(${avatarScale})`,
                 }}
-                className="absolute z-[58] cursor-pointer group select-none"
-                title="Clic gauche pour infliger une claque et étourdir cet avatar pendant 2 secondes !"
+                className="absolute z-[58] cursor-none group select-none"
               >
                 <div className="mb-1 px-2.5 py-1 rounded-full bg-slate-950/90 border border-white/20 text-[10px] font-bold text-white whitespace-nowrap shadow-lg text-center">
                   {isStunned ? (
@@ -1576,45 +1561,17 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
                 </div>
 
                 <div
-                  className={`relative w-24 h-28 flex items-center justify-center rounded-2xl transition-transform group-hover:scale-105 ${
+                  className={`relative w-28 h-32 flex items-center justify-center rounded-2xl transition-transform ${
                     isStunned ? 'rotate-12 opacity-85' : ''
                   }`}
                 >
                   <svg
-                    viewBox="0 0 100 120"
-                    className="w-24 h-28 overflow-visible drop-shadow-[0_6px_16px_rgba(0,0,0,0.85)]"
+                    viewBox="0 0 115 125"
+                    className="w-28 h-32 overflow-visible drop-shadow-[0_6px_16px_rgba(0,0,0,0.85)]"
                     style={{
                       transform: `scaleX(${av.facing})`,
                     }}
                   >
-                    {isCelestial ? (
-                      <circle
-                        cx="50"
-                        cy="36"
-                        r="26"
-                        fill="none"
-                        stroke="#fde047"
-                        strokeWidth="3"
-                        strokeDasharray="6 4"
-                      />
-                    ) : (
-                      <circle
-                        cx="50"
-                        cy="44"
-                        r="28"
-                        fill="none"
-                        stroke="#f43f5e"
-                        strokeWidth="3"
-                        strokeDasharray="8 5"
-                      />
-                    )}
-
-                    <path
-                      d="M36 45 L24 92 L44 88 Z"
-                      fill={isCelestial ? '#fef08a' : '#9f1239'}
-                      opacity="0.85"
-                    />
-
                     <rect
                       x="38"
                       y="72"
@@ -1645,11 +1602,6 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
                       strokeWidth="3"
                     />
 
-                    <polygon
-                      points="50,50 56,58 50,66 44,58"
-                      fill={isCelestial ? '#38bdf8' : '#f43f5e'}
-                    />
-
                     <rect
                       x="36"
                       y="16"
@@ -1661,34 +1613,52 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
                       strokeWidth="2.5"
                     />
 
-                    <rect
-                      x="52"
-                      y="25"
-                      width="7"
-                      height="4"
-                      fill={isCelestial ? '#38bdf8' : '#ff1744'}
-                    />
-
-                    <g transform={`rotate(${swordSwing} 64 52)`}>
-                      <rect
-                        x="60"
-                        y="46"
-                        width="16"
-                        height="8"
-                        rx="3"
-                        fill={isCelestial ? '#fde047' : '#e11d48'}
-                      />
-                      <rect
-                        x="74"
-                        y="12"
-                        width="7"
-                        height="44"
-                        rx="3"
-                        fill={isCelestial ? '#ffffff' : '#f43f5e'}
-                        stroke={isCelestial ? '#38bdf8' : '#9f1239'}
-                        strokeWidth="2"
-                      />
-                    </g>
+                    {isCelestial ? (
+                      <g transform={`rotate(${weaponAngle} 64 52)`}>
+                        <rect
+                          x="62"
+                          y="18"
+                          width="6"
+                          height="48"
+                          rx="2"
+                          fill="#92400e"
+                          stroke="#fde047"
+                          strokeWidth="1.5"
+                        />
+                        <rect
+                          x="50"
+                          y="8"
+                          width="30"
+                          height="16"
+                          rx="4"
+                          fill="#475569"
+                          stroke="#fbbf24"
+                          strokeWidth="2.5"
+                        />
+                      </g>
+                    ) : (
+                      <g transform={`rotate(${weaponAngle * 0.4} 64 52)`}>
+                        <rect
+                          x="62"
+                          y="44"
+                          width="26"
+                          height="10"
+                          rx="3"
+                          fill="#1e1b4b"
+                          stroke="#f43f5e"
+                          strokeWidth="2"
+                        />
+                        <rect
+                          x="62"
+                          y="52"
+                          width="9"
+                          height="14"
+                          rx="2"
+                          fill="#31102f"
+                        />
+                        <circle cx="89" cy="49" r="4" fill="#38bdf8" />
+                      </g>
+                    )}
                   </svg>
                 </div>
               </div>
@@ -1723,28 +1693,8 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
                 <path d="M880 410 L620 290 L340 240 L90 110" />
                 <path d="M880 410 L710 140 L480 60 L220 20" />
                 <path d="M880 410 L540 430 L260 510 L40 580" />
-                <path d="M880 410 L760 560 L510 590" />
-                <path d="M620 290 L520 150 L310 90" />
-                <path d="M540 430 L390 340 L180 390" />
-                <path d="M710 140 L890 40" />
-              </g>
-              <g stroke="#38bdf8" strokeWidth="1.5" fill="none" opacity="0.8">
-                <polygon points="880,410 710,140 620,290" />
-                <polygon points="880,410 620,290 540,430" />
-                <polygon points="620,290 340,240 520,150" />
               </g>
             </svg>
-            <div className="absolute inset-0 flex items-center justify-center p-6">
-              <div className="bg-black/90 border-4 border-red-500 rounded-3xl px-8 py-6 text-center shadow-[0_0_120px_rgba(239,68,68,1)]">
-                <AlertOctagon className="w-16 h-16 text-red-500 mx-auto mb-2 animate-ping" />
-                <div className="text-xs font-mono font-black uppercase tracking-[0.3em] text-amber-300">
-                  DÉTONATION BOMBE SYSTEM32 • ÉCRAN BRISÉ
-                </div>
-                <h2 className="text-2xl sm:text-4xl font-black text-white mt-1">
-                  EFFONDREMENT MATÉRIEL &amp; FUITE RÉSEAU
-                </h2>
-              </div>
-            </div>
           </div>
         )}
 
@@ -1755,38 +1705,25 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
                 viewBox="0 0 1000 600"
                 className="fixed inset-0 w-full h-full z-40 pointer-events-none"
               >
-                <g
-                  stroke="#38bdf8"
-                  strokeWidth="6"
-                  fill="none"
-                  className="drop-shadow-[0_0_25px_rgba(56,189,248,1)]"
-                >
+                <g stroke="#38bdf8" strokeWidth="6" fill="none">
                   <polyline points="500,0 440,140 475,240 385,390 410,470 350,565" />
                   <polyline points="500,0 565,150 530,255 620,395 590,475 650,565" />
-                </g>
-                <g stroke="#fef08a" strokeWidth="3" fill="none">
-                  <polyline points="495,0 420,160 455,260 365,410 350,565" />
-                  <polyline points="505,0 585,165 545,270 635,415 650,565" />
                 </g>
               </svg>
             )}
 
             <div className="fixed inset-0 z-40 flex items-center justify-center p-4 pointer-events-auto pb-44">
               <div className="max-w-xl w-full bg-slate-900/95 border-2 border-emerald-400 rounded-3xl p-7 text-center shadow-[0_0_90px_rgba(16,185,129,0.5)] backdrop-blur-xl space-y-4">
-                <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 border border-emerald-400/60 flex items-center justify-center mx-auto text-emerald-300 shadow-[0_0_30px_rgba(16,185,129,0.4)]">
+                <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 border border-emerald-400/60 flex items-center justify-center mx-auto text-emerald-300">
                   <Lock className="w-9 h-9" />
                 </div>
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[11px] font-black uppercase tracking-widest">
                   <Sparkles className="w-3.5 h-3.5" />
-                  CONFINEMENT ANTIVIRUS 100% • ENTRAVE PHYSIQUE ACTIVE
+                  ANTIVIRUS SHIELD PRO 100% • ENTRAVE PHYSIQUE ACTIVE
                 </div>
                 <h2 className="text-xl sm:text-2xl font-black text-white tracking-wide uppercase">
                   ANOMALIES SOUMISES ET VERROUILLÉES DANS LE NOYAU.
                 </h2>
-                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                  Les éclairs de confinement numérique ont plaqué l’Entité Céleste et le Souverain du Néant au sol ! De lourdes chaînes métalliques reliées à des boulets de fonte noirs verrouillent désormais leurs chevilles sur la barre des tâches.
-                </p>
-
                 <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-400/50 flex items-center gap-3 text-left">
                   <Trophy className="w-7 h-7 text-amber-300 shrink-0" />
                   <div>
@@ -1803,7 +1740,7 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
                   <button
                     type="button"
                     onClick={onVictoryReturnToMenu}
-                    className="flex-1 py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 hover:from-emerald-300 hover:to-cyan-300 text-slate-950 font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(16,185,129,0.4)] cursor-pointer transition-all"
+                    className="flex-1 py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 text-slate-950 font-black text-xs sm:text-sm flex items-center justify-center gap-2 cursor-none"
                   >
                     <Home className="w-4 h-4" />
                     Valider la Fin Secrète &amp; Menu Principal
@@ -1811,7 +1748,7 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
                   <button
                     type="button"
                     onClick={handleRestartMiniGame}
-                    className="py-3.5 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer transition-all"
+                    className="py-3.5 px-4 rounded-2xl bg-slate-800 text-slate-200 border border-slate-700 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 cursor-none"
                   >
                     <RotateCcw className="w-4 h-4" />
                     Rejouer
@@ -1825,58 +1762,23 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
                 const isCelestial = role === 'CELESTIAL';
                 const strugglePull =
                   Math.abs(
-                    Math.sin(
-                      victoryStageTime * 5.5 + (isCelestial ? 0 : 1.7)
-                    )
-                  ) *
-                  (isCelestial ? -18 : 18);
+                    Math.sin(victoryStageTime * 5.5 + (isCelestial ? 0 : 1.7))
+                  ) * (isCelestial ? -18 : 18);
                 const bodyStrainTilt = isCelestial ? -22 : 22;
 
                 return (
-                  <div
-                    key={role}
-                    className="relative flex flex-col items-center"
-                  >
-                    <div className="mb-1 px-3 py-1 rounded-xl bg-slate-950/95 border border-rose-500/50 text-[10px] font-mono font-bold text-amber-200 whitespace-nowrap shadow-xl">
-                      {isCelestial
-                        ? '⛓️ « Argh ! Ces chaînes du noyau sont incassables ! »'
-                        : '⛓️ « Maudit boulet de fonte ! Libérez-nous ! »'}
-                    </div>
-
+                  <div key={role} className="relative flex flex-col items-center">
                     <svg
                       viewBox="0 0 230 120"
-                      className="w-56 sm:w-64 h-28 overflow-visible drop-shadow-[0_8px_18px_rgba(0,0,0,0.95)]"
+                      className="w-56 sm:w-64 h-28 overflow-visible"
                     >
-                      <defs>
-                        <radialGradient
-                          id={`ironBallGrad-${role}`}
-                          cx="35%"
-                          cy="30%"
-                          r="65%"
-                        >
-                          <stop offset="0%" stopColor="#475569" />
-                          <stop offset="45%" stopColor="#1e293b" />
-                          <stop offset="100%" stopColor="#020617" />
-                        </radialGradient>
-                      </defs>
-
-                      <ellipse
-                        cx={isCelestial ? 172 : 58}
-                        cy="104"
-                        rx="30"
-                        ry="7"
-                        fill="rgba(0,0,0,0.75)"
-                      />
-
                       {[0, 1, 2, 3, 4, 5].map((linkIdx) => {
                         const tLink = linkIdx / 5;
                         const anchorX = isCelestial ? 148 : 82;
                         const ankleX =
                           (isCelestial ? 86 : 144) + strugglePull;
-                        const lx =
-                          anchorX + (ankleX - anchorX) * tLink;
-                        const ly =
-                          92 + Math.sin(tLink * Math.PI) * 4;
+                        const lx = anchorX + (ankleX - anchorX) * tLink;
+                        const ly = 92 + Math.sin(tLink * Math.PI) * 4;
                         return (
                           <rect
                             key={linkIdx}
@@ -1886,74 +1788,24 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
                             height="8"
                             rx="3"
                             fill="none"
-                            stroke={
-                              linkIdx % 2 === 0 ? '#94a3b8' : '#64748b'
-                            }
+                            stroke="#94a3b8"
                             strokeWidth="3"
                           />
                         );
                       })}
-
                       <circle
                         cx={isCelestial ? 172 : 58}
                         cy="82"
                         r="24"
-                        fill={`url(#ironBallGrad-${role})`}
+                        fill="#0f172a"
                         stroke="#334155"
                         strokeWidth="3"
                       />
-                      <circle
-                        cx={isCelestial ? 164 : 50}
-                        cy="73"
-                        r="5"
-                        fill="#94a3b8"
-                        opacity="0.45"
-                      />
-                      <text
-                        x={isCelestial ? 172 : 58}
-                        y="86"
-                        textAnchor="middle"
-                        fill="#e2e8f0"
-                        fontSize="8"
-                        fontWeight="bold"
-                        fontFamily="monospace"
-                      >
-                        NOYAU
-                      </text>
-
                       <g
                         transform={`translate(${strugglePull}, 0) rotate(${bodyStrainTilt} ${
                           isCelestial ? 78 : 152
                         } 88)`}
                       >
-                        <rect
-                          x={isCelestial ? 68 : 140}
-                          y="72"
-                          width="10"
-                          height="24"
-                          rx="4"
-                          fill={isCelestial ? '#f8fafc' : '#1e1b4b'}
-                        />
-                        <rect
-                          x={isCelestial ? 82 : 154}
-                          y="72"
-                          width="10"
-                          height="24"
-                          rx="4"
-                          fill={isCelestial ? '#f8fafc' : '#1e1b4b'}
-                        />
-
-                        <rect
-                          x={isCelestial ? 66 : 138}
-                          y="86"
-                          width="28"
-                          height="7"
-                          rx="2"
-                          fill="#334155"
-                          stroke="#cbd5e1"
-                          strokeWidth="1.5"
-                        />
-
                         <rect
                           x={isCelestial ? 65 : 137}
                           y="42"
@@ -1964,7 +1816,6 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
                           stroke={isCelestial ? '#fbbf24' : '#e11d48'}
                           strokeWidth="2.5"
                         />
-
                         <rect
                           x={isCelestial ? 67 : 139}
                           y="18"
@@ -1983,10 +1834,42 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
             </div>
           </>
         )}
+
+        <div
+          style={{
+            left: `${cursorDisplay.x}%`,
+            top: `${cursorDisplay.y}%`,
+            transform: 'translate(-20%, -15%)',
+          }}
+          className="fixed z-[150] pointer-events-none select-none"
+        >
+          <div
+            className={`relative flex items-center ${
+              cursorDisplay.stunTimer > 0 ? 'animate-spin' : ''
+            }`}
+          >
+            <svg
+              viewBox="0 0 36 36"
+              className="w-8 h-8 drop-shadow-[0_4px_10px_rgba(0,0,0,0.95)]"
+            >
+              <polygon
+                points="4,2 4,28 11,22 17,33 22,30 16,19 26,19"
+                fill={cursorDisplay.stunTimer > 0 ? '#f43f5e' : '#ffffff'}
+                stroke={cursorDisplay.stunTimer > 0 ? '#fde047' : '#020617'}
+                strokeWidth="2.2"
+              />
+            </svg>
+            {cursorDisplay.stunTimer > 0 && (
+              <span className="ml-1 px-2 py-0.5 rounded bg-rose-600 border border-yellow-300 text-[10px] font-mono font-black text-white whitespace-nowrap">
+                ⚡ ÉTOURDI ({cursorDisplay.stunTimer.toFixed(1)}s)
+              </span>
+            )}
+          </div>
+        </div>
       </div>
 
       {startMenuOpen && (
-        <div className="fixed bottom-14 left-3 z-50 w-72 rounded-2xl bg-slate-900/95 border border-white/15 p-4 shadow-2xl backdrop-blur-xl space-y-3">
+        <div className="fixed bottom-14 left-3 z-50 w-72 rounded-2xl bg-slate-900/95 border border-white/15 p-4 shadow-2xl backdrop-blur-xl space-y-3 cursor-none">
           <div className="text-xs font-black text-white border-b border-slate-800 pb-2 flex items-center justify-between">
             <span>Windows Aetheria OS</span>
             <span className="text-emerald-400 font-mono text-[10px]">
@@ -1997,17 +1880,17 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
             type="button"
             onClick={() => {
               setStartMenuOpen(false);
-              launchAntivirusInstaller();
+              openFakeBrowserModal();
             }}
-            className="w-full py-2 px-3 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 text-xs font-bold flex items-center gap-2 cursor-pointer"
+            className="w-full py-2 px-3 rounded-xl bg-cyan-500/20 text-cyan-200 text-xs font-bold flex items-center gap-2 cursor-none"
           >
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            Lancer Antivirus_Setup.exe
+            <Globe className="w-4 h-4 text-cyan-400" />
+            Ouvrir Navigateur Web
           </button>
           <button
             type="button"
             onClick={onReturnToMainMenu}
-            className="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-rose-950/60 text-slate-200 text-xs font-bold flex items-center gap-2 cursor-pointer"
+            className="w-full py-2 px-3 rounded-xl bg-slate-800 text-slate-200 text-xs font-bold flex items-center gap-2 cursor-none"
           >
             <Home className="w-4 h-4 text-rose-400" />
             Quitter vers le Menu Principal
@@ -2015,43 +1898,22 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
         </div>
       )}
 
-      <div className="relative z-50 h-12 w-full bg-slate-950/95 backdrop-blur-xl border-t border-white/15 px-3 flex items-center justify-between text-xs text-slate-200">
+      <div className="relative z-50 h-12 w-full bg-slate-950/95 backdrop-blur-xl border-t border-white/15 px-3 flex items-center justify-between text-xs text-slate-200 cursor-none">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setStartMenuOpen((prev) => !prev)}
-            className="px-3 py-1.5 rounded-lg bg-blue-600/25 hover:bg-blue-600/40 border border-blue-400/40 flex items-center gap-2 font-bold text-white cursor-pointer"
+            className="px-3 py-1.5 rounded-lg bg-blue-600/25 border border-blue-400/40 flex items-center gap-2 font-bold text-white cursor-none"
           >
-            <span className="grid grid-cols-2 gap-0.5 w-3.5 h-3.5">
-              <span className="bg-sky-400 rounded-[1px]" />
-              <span className="bg-sky-400 rounded-[1px]" />
-              <span className="bg-sky-400 rounded-[1px]" />
-              <span className="bg-sky-400 rounded-[1px]" />
-            </span>
             <span>Démarrer</span>
           </button>
-
           <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-[11px] text-slate-300">
-            <Terminal className="w-3.5 h-3.5 text-fuchsia-400" />
-            <span>
-              {phase === 'VICTORY'
-                ? 'Noyau_Verrouillé [Anomalies Enchaînées]'
-                : 'Aetherial_Horizons.exe [Fermé — Fuite Bureau]'}
-            </span>
+            <Crosshair className="w-3.5 h-3.5 text-amber-400" />
+            <span>Curseur Physique Actif (Attention au Marteau &amp; Pistolet !)</span>
           </div>
-
-          {antivirusOpen && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-950/80 border border-emerald-400/50 text-[11px] text-emerald-200 font-bold">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Antivirus_Setup.exe ({Math.round(antivirusProgress)}%)</span>
-            </div>
-          )}
         </div>
 
         <div className="flex items-center gap-3 text-[11px] text-slate-300">
-          <span className="hidden sm:inline font-mono text-xs text-emerald-400 font-bold">
-            FRA
-          </span>
           <Wifi className="w-3.5 h-3.5 text-sky-400" />
           <Volume2 className="w-3.5 h-3.5 text-slate-300" />
           <div className="text-right leading-tight font-mono">

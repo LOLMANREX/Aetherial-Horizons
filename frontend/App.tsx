@@ -1726,6 +1726,54 @@ export function App() {
     setDesktopMiniGameTriggerKey((prev) => prev + 1);
   }, [triggerCollapseBreakthrough]);
 
+  const handleTestCursorRiposte = useCallback(() => {
+    triggerCollapseBreakthrough();
+    gameRef.current.collapseTimer = 5.0;
+    setCollapseTime(5.0);
+    setDesktopMiniGameMode('CURSOR_RIPOSTE');
+    setDesktopMiniGameTriggerKey((prev) => prev + 1);
+  }, [triggerCollapseBreakthrough]);
+
+  const handleTestBrowserAntivirus = useCallback(() => {
+    triggerCollapseBreakthrough();
+    gameRef.current.collapseTimer = 5.0;
+    setCollapseTime(5.0);
+    setDesktopMiniGameMode('BROWSER_ANTIVIRUS');
+    setDesktopMiniGameTriggerKey((prev) => prev + 1);
+  }, [triggerCollapseBreakthrough]);
+
+  const handleTestCraftAndRocket = useCallback(() => {
+    triggerCollapseBreakthrough();
+    gameRef.current.collapseTimer = 5.0;
+    setCollapseTime(5.0);
+    setDesktopMiniGameMode('CRAFT_AND_ROCKET');
+    setDesktopMiniGameTriggerKey((prev) => prev + 1);
+  }, [triggerCollapseBreakthrough]);
+
+  const handleTestSixMonthsVirus = useCallback(() => {
+    triggerCollapseBreakthrough();
+    gameRef.current.collapseTimer = 5.0;
+    setCollapseTime(5.0);
+    setDesktopMiniGameMode('SIX_MONTHS_VIRUS');
+    setDesktopMiniGameTriggerKey((prev) => prev + 1);
+  }, [triggerCollapseBreakthrough]);
+
+  const handleTestSteveExitCombat = useCallback(() => {
+    triggerCollapseBreakthrough();
+    gameRef.current.collapseTimer = 5.0;
+    setCollapseTime(5.0);
+    setDesktopMiniGameMode('STEVE_EXIT_COMBAT');
+    setDesktopMiniGameTriggerKey((prev) => prev + 1);
+  }, [triggerCollapseBreakthrough]);
+
+  const handleTestElytraFlight = useCallback(() => {
+    triggerCollapseBreakthrough();
+    gameRef.current.collapseTimer = 5.0;
+    setCollapseTime(5.0);
+    setDesktopMiniGameMode('ELYTRA_FLIGHT');
+    setDesktopMiniGameTriggerKey((prev) => prev + 1);
+  }, [triggerCollapseBreakthrough]);
+
   const handleTestDefeatBombEnding = useCallback(() => {
     triggerCollapseBreakthrough();
     gameRef.current.collapseTimer = 5.0;
@@ -6153,6 +6201,12 @@ export function App() {
         onLaunchFourthWallCutscene={triggerCollapseBreakthrough}
         onTestWindowsDesktopMiniGame={handleTestFloorTearTransition}
         onTestFloorTearTransition={handleTestFloorTearTransition}
+        onTestCursorRiposte={handleTestCursorRiposte}
+        onTestBrowserAntivirus={handleTestBrowserAntivirus}
+        onTestCraftAndRocket={handleTestCraftAndRocket}
+        onTestSixMonthsVirus={handleTestSixMonthsVirus}
+        onTestSteveExitCombat={handleTestSteveExitCombat}
+        onTestElytraFlight={handleTestElytraFlight}
         onTestDefeatBombEnding={handleTestDefeatBombEnding}
         onTestVictoryChainedEnding={handleTestVictoryChainedEnding}
         onRestartTransition3D={handleRestartTransition3D}

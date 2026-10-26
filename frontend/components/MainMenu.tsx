@@ -68,6 +68,12 @@ interface MainMenuProps {
   onLaunchFourthWallCutscene?: () => void;
   onTestWindowsDesktopMiniGame?: () => void;
   onTestFloorTearTransition?: () => void;
+  onTestCursorRiposte?: () => void;
+  onTestBrowserAntivirus?: () => void;
+  onTestCraftAndRocket?: () => void;
+  onTestSixMonthsVirus?: () => void;
+  onTestSteveExitCombat?: () => void;
+  onTestElytraFlight?: () => void;
   onTestDefeatBombEnding?: () => void;
   onTestVictoryChainedEnding?: () => void;
   onRestartTransition3D?: () => void;
@@ -110,6 +116,12 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   onLaunchFourthWallCutscene,
   onTestWindowsDesktopMiniGame,
   onTestFloorTearTransition,
+  onTestCursorRiposte,
+  onTestBrowserAntivirus,
+  onTestCraftAndRocket,
+  onTestSixMonthsVirus,
+  onTestSteveExitCombat,
+  onTestElytraFlight,
   onTestDefeatBombEnding,
   onTestVictoryChainedEnding,
   onRestartTransition3D,
@@ -873,6 +885,90 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                     >
                       <Monitor className="w-4 h-4" />
                       Tester Transition Déchirure Sol
+                    </button>
+                  )}
+
+                  {onTestCursorRiposte && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOptionsOpen(false);
+                        onTestCursorRiposte();
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-amber-500/25 hover:bg-amber-500/35 text-amber-200 border border-amber-400/50 font-extrabold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <Sparkles className="w-4 h-4 text-amber-300" />
+                      Tester Riposte Curseur (Marteau/Pistolet)
+                    </button>
+                  )}
+
+                  {onTestBrowserAntivirus && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOptionsOpen(false);
+                        onTestBrowserAntivirus();
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-cyan-500/25 hover:bg-cyan-500/35 text-cyan-200 border border-cyan-400/50 font-extrabold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <Monitor className="w-4 h-4 text-cyan-300" />
+                      Tester Navigateur &amp; Favoris Antivirus
+                    </button>
+                  )}
+
+                  {onTestCraftAndRocket && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOptionsOpen(false);
+                        onTestCraftAndRocket();
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-fuchsia-500/25 hover:bg-fuchsia-500/35 text-fuchsia-200 border border-fuchsia-400/50 font-extrabold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <Flame className="w-4 h-4 text-fuchsia-300" />
+                      Tester Atelier Craft &amp; Tir Fusée
+                    </button>
+                  )}
+
+                  {onTestSixMonthsVirus && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOptionsOpen(false);
+                        onTestSixMonthsVirus();
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-rose-500/25 hover:bg-rose-500/35 text-rose-200 border border-rose-400/50 font-extrabold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <Terminal className="w-4 h-4 text-rose-300" />
+                      Tester Attaque Virus (6 mois plus tard)
+                    </button>
+                  )}
+
+                  {onTestSteveExitCombat && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOptionsOpen(false);
+                        onTestSteveExitCombat();
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-emerald-500/25 hover:bg-emerald-500/35 text-emerald-200 border border-emerald-400/50 font-extrabold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <Play className="w-4 h-4 text-emerald-300" />
+                      Tester Sortie Steve Netherite
+                    </button>
+                  )}
+
+                  {onTestElytraFlight && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOptionsOpen(false);
+                        onTestElytraFlight();
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-500 via-indigo-500 to-cyan-400 hover:from-purple-400 hover:to-cyan-300 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      Tester Vol Élytres vers Open-World
                     </button>
                   )}
 
