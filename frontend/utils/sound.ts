@@ -1,5 +1,7 @@
 class SoundEffects {
   private ctx: AudioContext | null = null;
+  private masterGain: GainNode | null = null;
+  private volume = 1.0;
   public enabled = true;
 
   public init(): void {
@@ -10,9 +12,32 @@ class SoundEffects {
         (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (AudioCtx) {
         this.ctx = new AudioCtx();
+        this.masterGain = this.ctx.createGain();
+        this.masterGain.gain.value = this.enabled ? this.volume : 0;
+        this.masterGain.connect(this.ctx.destination);
       }
     }
     if (this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(() => {});
+    }
+  }
+
+  public setAudioConfig(muted: boolean, volume?: number): void {
+    this.enabled = !muted;
+    if (typeof volume === 'number' && Number.isFinite(volume)) {
+      this.volume = Math.max(0, Math.min(1, volume));
+    }
+    if (this.masterGain && this.ctx) {
+      try {
+        this.masterGain.gain.setValueAtTime(
+          this.enabled ? this.volume : 0,
+          this.ctx.currentTime
+        );
+      } catch {}
+    }
+    if (!this.enabled && this.ctx && this.ctx.state === 'running') {
+      this.ctx.suspend().catch(() => {});
+    } else if (this.enabled && this.ctx && this.ctx.state === 'suspended') {
       this.ctx.resume().catch(() => {});
     }
   }
@@ -23,6 +48,10 @@ class SoundEffects {
       this.init();
     }
     return this.ctx;
+  }
+
+  private getOutput(ctx: AudioContext): AudioNode {
+    return this.masterGain ?? ctx.destination;
   }
 
   public playJump(): void {
@@ -41,12 +70,10 @@ class SoundEffects {
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
 
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.getOutput(ctx));
       osc.start(now);
       osc.stop(now + 0.15);
-    } catch {
-      // Ignore audio errors
-    }
+    } catch {}
   }
 
   public playLightningDash(): void {
@@ -65,12 +92,10 @@ class SoundEffects {
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
 
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.getOutput(ctx));
       osc.start(now);
       osc.stop(now + 0.24);
-    } catch {
-      // Ignore audio errors
-    }
+    } catch {}
   }
 
   public playTimeShift(): void {
@@ -88,13 +113,11 @@ class SoundEffects {
         gain.gain.setValueAtTime(0.09, now + i * 0.06);
         gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.06 + 0.35);
         osc.connect(gain);
-        gain.connect(ctx.destination);
+        gain.connect(this.getOutput(ctx));
         osc.start(now + i * 0.06);
         osc.stop(now + i * 0.06 + 0.36);
       });
-    } catch {
-      // Ignore audio errors
-    }
+    } catch {}
   }
 
   public playNovaBlast(): void {
@@ -113,12 +136,10 @@ class SoundEffects {
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.58);
 
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.getOutput(ctx));
       osc.start(now);
       osc.stop(now + 0.58);
-    } catch {
-      // Ignore audio errors
-    }
+    } catch {}
   }
 
   public playBossRoar(): void {
@@ -143,13 +164,11 @@ class SoundEffects {
         gain.gain.exponentialRampToValueAtTime(0.001, now + 1.3);
 
         osc.connect(gain);
-        gain.connect(ctx.destination);
+        gain.connect(this.getOutput(ctx));
         osc.start(now);
         osc.stop(now + 1.35);
       });
-    } catch {
-      // Ignore audio errors
-    }
+    } catch {}
   }
 
   public playBossSlam(): void {
@@ -168,12 +187,10 @@ class SoundEffects {
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
 
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.getOutput(ctx));
       osc.start(now);
       osc.stop(now + 0.56);
-    } catch {
-      // Ignore audio errors
-    }
+    } catch {}
   }
 
   public playSplash(): void {
@@ -192,12 +209,10 @@ class SoundEffects {
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
 
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.getOutput(ctx));
       osc.start(now);
       osc.stop(now + 0.26);
-    } catch {
-      // Ignore audio errors
-    }
+    } catch {}
   }
 
   public playSwordSwing(): void {
@@ -216,12 +231,10 @@ class SoundEffects {
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
 
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.getOutput(ctx));
       osc.start(now);
       osc.stop(now + 0.17);
-    } catch {
-      // Ignore audio errors
-    }
+    } catch {}
   }
 
   public playBowDraw(): void {
@@ -240,12 +253,10 @@ class SoundEffects {
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.48);
 
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.getOutput(ctx));
       osc.start(now);
       osc.stop(now + 0.48);
-    } catch {
-      // Ignore audio errors
-    }
+    } catch {}
   }
 
   public playBowShoot(): void {
@@ -264,12 +275,10 @@ class SoundEffects {
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
 
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.getOutput(ctx));
       osc.start(now);
       osc.stop(now + 0.13);
-    } catch {
-      // Ignore audio errors
-    }
+    } catch {}
   }
 
   public playEnemyHit(killed = false): void {
@@ -288,12 +297,10 @@ class SoundEffects {
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.19);
 
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.getOutput(ctx));
       osc.start(now);
       osc.stop(now + 0.19);
-    } catch {
-      // Ignore audio errors
-    }
+    } catch {}
   }
 
   public playPlayerHurt(): void {
@@ -312,12 +319,10 @@ class SoundEffects {
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
 
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.getOutput(ctx));
       osc.start(now);
       osc.stop(now + 0.24);
-    } catch {
-      // Ignore audio errors
-    }
+    } catch {}
   }
 
   public playPickupAmmo(): void {
@@ -336,12 +341,10 @@ class SoundEffects {
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
 
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.getOutput(ctx));
       osc.start(now);
       osc.stop(now + 0.16);
-    } catch {
-      // Ignore audio errors
-    }
+    } catch {}
   }
 
   public playOrbCollect(orbCount: number): void {
@@ -365,12 +368,10 @@ class SoundEffects {
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
 
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.getOutput(ctx));
       osc.start(now);
       osc.stop(now + 0.32);
-    } catch {
-      // Ignore audio errors
-    }
+    } catch {}
   }
 
   public playCinematicChord(step = 0, isFinale = false): void {
@@ -408,7 +409,7 @@ class SoundEffects {
         gain.gain.exponentialRampToValueAtTime(0.0008, now + idx * 0.06 + 2.4);
 
         osc.connect(gain);
-        gain.connect(ctx.destination);
+        gain.connect(this.getOutput(ctx));
         osc.start(now + idx * 0.06);
         osc.stop(now + idx * 0.06 + 2.5);
       });
@@ -433,7 +434,7 @@ class SoundEffects {
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
 
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.getOutput(ctx));
       osc.start(now);
       osc.stop(now + 0.27);
     } catch {}
@@ -456,7 +457,7 @@ class SoundEffects {
       subGain.gain.setValueAtTime(0.38, now);
       subGain.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
       subOsc.connect(subGain);
-      subGain.connect(ctx.destination);
+      subGain.connect(this.getOutput(ctx));
       subOsc.start(now);
       subOsc.stop(now + 1.55);
 
@@ -470,7 +471,7 @@ class SoundEffects {
         gain.gain.setValueAtTime(0.16, now + idx * 0.04);
         gain.gain.exponentialRampToValueAtTime(0.001, now + 1.4);
         osc.connect(gain);
-        gain.connect(ctx.destination);
+        gain.connect(this.getOutput(ctx));
         osc.start(now + idx * 0.04);
         osc.stop(now + 1.42);
       });
@@ -497,7 +498,7 @@ class SoundEffects {
         gain.gain.setValueAtTime(0.11, t0);
         gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.2);
         osc.connect(gain);
-        gain.connect(ctx.destination);
+        gain.connect(this.getOutput(ctx));
         osc.start(t0);
         osc.stop(t0 + 0.21);
       });
@@ -519,7 +520,7 @@ class SoundEffects {
       gain.gain.setValueAtTime(0.09, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.getOutput(ctx));
       osc.start(now);
       osc.stop(now + 0.12);
     } catch {}
@@ -542,7 +543,7 @@ class SoundEffects {
       gain.gain.setValueAtTime(Math.min(0.16, 0.07 * intensity), now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.getOutput(ctx));
       osc.start(now);
       osc.stop(now + 0.095);
     } catch {}
@@ -573,7 +574,7 @@ class SoundEffects {
       noiseGain.gain.setValueAtTime(0.32, now + duration - 0.05);
       noiseGain.gain.setValueAtTime(0.0, now + duration);
       whiteNoise.connect(noiseGain);
-      noiseGain.connect(ctx.destination);
+      noiseGain.connect(this.getOutput(ctx));
       whiteNoise.start(now);
       whiteNoise.stop(now + duration);
 
@@ -587,7 +588,7 @@ class SoundEffects {
         gain.gain.setValueAtTime(idx < 2 ? 0.14 : 0.2, now);
         gain.gain.setValueAtTime(0.0, now + duration);
         osc.connect(gain);
-        gain.connect(ctx.destination);
+        gain.connect(this.getOutput(ctx));
         osc.start(now);
         osc.stop(now + duration);
       });
@@ -597,6 +598,9 @@ class SoundEffects {
   public silenceAll(): void {
     if (!this.ctx) return;
     try {
+      if (this.masterGain) {
+        this.masterGain.gain.setValueAtTime(0, this.ctx.currentTime);
+      }
       if (this.ctx.state === 'running') {
         this.ctx.suspend().catch(() => {});
       }

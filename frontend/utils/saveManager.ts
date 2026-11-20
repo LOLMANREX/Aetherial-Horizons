@@ -1,53 +1,80 @@
 import { SaveSlotData } from '../types';
-import { db, ensureAuthenticated } from '../services/firebase';
-import { doc, setDoc, deleteDoc, getDocs, collection } from 'firebase/firestore';
 
-const STORAGE_KEY = 'aetherial_horizons_saves_v1';
-const PROGRESSION_KEY = 'aetherial_horizons_progression_v1';
+const DEFAULT_NAMESPACE = 'aetheria_exe';
+let activeNamespace = DEFAULT_NAMESPACE;
+
+function sanitizeNamespace(raw: string): string {
+  const cleaned = String(raw || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .slice(0, 64);
+  return cleaned.length > 0 ? cleaned : DEFAULT_NAMESPACE;
+}
+
+export function setStorageNamespace(namespace?: string): string {
+  activeNamespace = sanitizeNamespace(namespace || DEFAULT_NAMESPACE);
+  return activeNamespace;
+}
+
+export function getStorageNamespace(): string {
+  return activeNamespace;
+}
+
+function getSavesKey(): string {
+  return `${activeNamespace}_saves_v1`;
+}
+
+function getProgressionKey(): string {
+  return `${activeNamespace}_progression_v1`;
+}
 
 export interface PersistentProgressionState {
   badEndingCompleted: boolean;
   goodEndingCompleted: boolean;
-  secretDesktopEndingCompleted?: boolean;
+  secretDesktopEndingCompleted: boolean;
+  secretEpilogueEndingCompleted: boolean;
+  totalPlayTimeSec: number;
 }
+
+const DEFAULT_PROGRESSION: PersistentProgressionState = {
+  badEndingCompleted: false,
+  goodEndingCompleted: false,
+  secretDesktopEndingCompleted: false,
+  secretEpilogueEndingCompleted: false,
+  totalPlayTimeSec: 0,
+};
 
 export const SaveManager = {
   getState(): PersistentProgressionState {
     try {
-      const raw = localStorage.getItem(PROGRESSION_KEY);
+      const raw = localStorage.getItem(getProgressionKey());
       const parsed = raw ? JSON.parse(raw) : {};
-      const badFlag =
-        localStorage.getItem('badEndingCompleted') === 'true' ||
-        Boolean(parsed.badEndingCompleted);
-      const goodFlag =
-        localStorage.getItem('goodEndingCompleted') === 'true' ||
-        Boolean(parsed.goodEndingCompleted);
-      const secretFlag =
-        localStorage.getItem('secretDesktopEndingCompleted') === 'true' ||
-        Boolean(parsed.secretDesktopEndingCompleted);
+      const totalPlayTimeSec = Number(parsed?.totalPlayTimeSec);
       return {
-        badEndingCompleted: badFlag,
-        goodEndingCompleted: goodFlag,
-        secretDesktopEndingCompleted: secretFlag,
+        badEndingCompleted: Boolean(parsed?.badEndingCompleted),
+        goodEndingCompleted: Boolean(parsed?.goodEndingCompleted),
+        secretDesktopEndingCompleted: Boolean(parsed?.secretDesktopEndingCompleted),
+        secretEpilogueEndingCompleted: Boolean(parsed?.secretEpilogueEndingCompleted),
+        totalPlayTimeSec:
+          Number.isFinite(totalPlayTimeSec) && totalPlayTimeSec > 0
+            ? Math.floor(totalPlayTimeSec)
+            : 0,
       };
     } catch {
-      return {
-        badEndingCompleted: false,
-        goodEndingCompleted: false,
-        secretDesktopEndingCompleted: false,
-      };
+      return { ...DEFAULT_PROGRESSION };
     }
   },
 
   saveState(state: PersistentProgressionState): void {
     try {
-      localStorage.setItem(PROGRESSION_KEY, JSON.stringify(state));
-      localStorage.setItem('badEndingCompleted', String(state.badEndingCompleted));
-      localStorage.setItem('goodEndingCompleted', String(state.goodEndingCompleted));
-      localStorage.setItem(
-        'secretDesktopEndingCompleted',
-        String(Boolean(state.secretDesktopEndingCompleted))
-      );
+      const normalized: PersistentProgressionState = {
+        badEndingCompleted: Boolean(state.badEndingCompleted),
+        goodEndingCompleted: Boolean(state.goodEndingCompleted),
+        secretDesktopEndingCompleted: Boolean(state.secretDesktopEndingCompleted),
+        secretEpilogueEndingCompleted: Boolean(state.secretEpilogueEndingCompleted),
+        totalPlayTimeSec: Math.max(0, Math.floor(Number(state.totalPlayTimeSec) || 0)),
+      };
+      localStorage.setItem(getProgressionKey(), JSON.stringify(normalized));
     } catch {}
   },
 
@@ -81,6 +108,28 @@ export const SaveManager = {
     return next;
   },
 
+  setSecretEpilogueEndingCompleted(completed = true): PersistentProgressionState {
+    const current = this.getState();
+    const next: PersistentProgressionState = {
+      ...current,
+      secretEpilogueEndingCompleted: completed,
+    };
+    this.saveState(next);
+    return next;
+  },
+
+  addPlayTime(deltaSec: number): PersistentProgressionState {
+    const cleanDelta = Math.max(0, Math.floor(Number(deltaSec) || 0));
+    const current = this.getState();
+    if (cleanDelta <= 0) return current;
+    const next: PersistentProgressionState = {
+      ...current,
+      totalPlayTimeSec: current.totalPlayTimeSec + cleanDelta,
+    };
+    this.saveState(next);
+    return next;
+  },
+
   isBadEndingCompleted(): boolean {
     return this.getState().badEndingCompleted;
   },
@@ -91,26 +140,16 @@ export const SaveManager = {
 
   resetAllSaves(): PersistentProgressionState {
     try {
-      localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem(PROGRESSION_KEY);
-      localStorage.removeItem('badEndingCompleted');
-      localStorage.removeItem('goodEndingCompleted');
-      localStorage.removeItem('secretDesktopEndingCompleted');
+      localStorage.removeItem(getSavesKey());
+      localStorage.removeItem(getProgressionKey());
     } catch {}
-    [1, 2, 3].forEach((slotId) => {
-      deleteSaveSlot(slotId);
-    });
-    return {
-      badEndingCompleted: false,
-      goodEndingCompleted: false,
-      secretDesktopEndingCompleted: false,
-    };
+    return { ...DEFAULT_PROGRESSION };
   },
 };
 
 export function getAllSaves(): Record<number, SaveSlotData | null> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(getSavesKey());
     if (!raw) {
       return { 1: null, 2: null, 3: null };
     }
@@ -125,36 +164,6 @@ export function getAllSaves(): Record<number, SaveSlotData | null> {
   }
 }
 
-export async function syncSavesFromCloud(): Promise<Record<number, SaveSlotData | null>> {
-  const localSaves = getAllSaves();
-  try {
-    const user = await ensureAuthenticated();
-    if (!user) return localSaves;
-
-    const snap = await getDocs(collection(db, 'users', user.uid, 'saves'));
-    let updated = false;
-
-    snap.forEach((docSnap) => {
-      const cloudSlot = docSnap.data() as SaveSlotData;
-      const slotId = cloudSlot.slotId;
-      if (slotId >= 1 && slotId <= 3) {
-        const localSlot = localSaves[slotId];
-        if (!localSlot || cloudSlot.updatedAt > localSlot.updatedAt) {
-          localSaves[slotId] = cloudSlot;
-          updated = true;
-        }
-      }
-    });
-
-    if (updated) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(localSaves));
-    }
-  } catch {
-    // Fallback transparent sur le stockage local
-  }
-  return localSaves;
-}
-
 export function saveToSlot(
   slotId: number,
   data: Omit<SaveSlotData, 'slotId' | 'updatedAt'>
@@ -167,20 +176,8 @@ export function saveToSlot(
   };
   saves[slotId] = entry;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(saves));
-  } catch {
-    // Ignore quota errors
-  }
-
-  // Synchronisation Cloud Firestore asynchrone non-bloquante
-  ensureAuthenticated()
-    .then((user) => {
-      if (user) {
-        return setDoc(doc(db, 'users', user.uid, 'saves', `slot_${slotId}`), entry);
-      }
-    })
-    .catch(() => {});
-
+    localStorage.setItem(getSavesKey(), JSON.stringify(saves));
+  } catch {}
   return entry;
 }
 
@@ -188,16 +185,6 @@ export function deleteSaveSlot(slotId: number): void {
   const saves = getAllSaves();
   saves[slotId] = null;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(saves));
-  } catch {
-    // Ignore errors
-  }
-
-  ensureAuthenticated()
-    .then((user) => {
-      if (user) {
-        return deleteDoc(doc(db, 'users', user.uid, 'saves', `slot_${slotId}`));
-      }
-    })
-    .catch(() => {});
+    localStorage.setItem(getSavesKey(), JSON.stringify(saves));
+  } catch {}
 }

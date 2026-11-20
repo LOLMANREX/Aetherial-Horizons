@@ -55,11 +55,17 @@ import {
   getAllSaves,
   saveToSlot,
   deleteSaveSlot,
-  syncSavesFromCloud,
+  setStorageNamespace,
   SaveManager,
 } from './utils/saveManager';
 import { soundFX } from './utils/sound';
 import { renderMinimapFrame } from './utils/minimapBridge';
+import {
+  cielBridge,
+  IS_CIEL_EMBED_BUILD,
+  CielEndingId,
+} from './utils/cielBridge';
+import { disposeObject3D } from './utils/disposeThree';
 
 const ORB_NAMES = [
   'Orbe de l’Aube Éternelle',
@@ -194,9 +200,14 @@ export function App() {
     useState<DesktopMiniGameInitialMode>('TRANSITION');
   const [desktopMiniGameTriggerKey, setDesktopMiniGameTriggerKey] = useState(0);
   const [endingChoice, setEndingChoice] = useState<EndingChoice>('NONE');
+  const [isEmbedMode, setIsEmbedMode] = useState<boolean>(IS_CIEL_EMBED_BUILD);
   const [progressionState, setProgressionState] = useState(() =>
     SaveManager.getState()
   );
+  const sessionStartRef = useRef<number>(Date.now());
+  const activePlayStartRef = useRef<number | null>(null);
+  const resumeMainLoopRef = useRef<(() => void) | null>(null);
+  const shutdownMainLoopRef = useRef<(() => void) | null>(null);
 
   const [playerStats, setPlayerStats] = useState<PlayerStats>({
     x: 0,
@@ -247,11 +258,46 @@ export function App() {
     },
   }));
 
-  useEffect(() => {
-    syncSavesFromCloud().then((mergedSaves) => {
-      setSaves({ ...mergedSaves });
-    });
+  const getElapsedSessionSec = useCallback(() => {
+    return Math.max(0, Math.floor((Date.now() - sessionStartRef.current) / 1000));
   }, []);
+
+  const flushPlayTime = useCallback(() => {
+    const now = Date.now();
+    if (activePlayStartRef.current !== null) {
+      const deltaSec = Math.floor((now - activePlayStartRef.current) / 1000);
+      if (deltaSec > 0) {
+        const updated = SaveManager.addPlayTime(deltaSec);
+        setProgressionState(updated);
+        activePlayStartRef.current += deltaSec * 1000;
+        return updated.totalPlayTimeSec;
+      }
+    }
+    return SaveManager.getState().totalPlayTimeSec;
+  }, []);
+
+  const emitEndingToHost = useCallback(
+    (endingId: CielEndingId) => {
+      const totalPlayTimeSec = flushPlayTime();
+      const orbsCollected = gameRef.current.orbs.filter((o) => o.collected).length;
+      cielBridge.emitEndingUnlocked(endingId, {
+        elapsedSec: getElapsedSessionSec(),
+        totalPlayTimeSec,
+        orbsCollected,
+      });
+    },
+    [flushPlayTime, getElapsedSessionSec]
+  );
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const scr = gameRef.current.screen;
+      if (scr === 'PLAYING' || scr === 'COLLAPSE_BREAKTHROUGH') {
+        flushPlayTime();
+      }
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [flushPlayTime]);
 
   const gameRef = useRef({
     screen: 'MAIN_MENU' as GameScreen,
@@ -348,10 +394,27 @@ export function App() {
     setTimeout(() => setRecentCollectName(null), 3200);
   }, []);
 
-  const updateScreen = useCallback((nextScreen: GameScreen) => {
-    gameRef.current.screen = nextScreen;
-    setScreen(nextScreen);
-  }, []);
+  const updateScreen = useCallback(
+    (nextScreen: GameScreen) => {
+      const prevScreen = gameRef.current.screen;
+      const wasActive =
+        prevScreen === 'PLAYING' || prevScreen === 'COLLAPSE_BREAKTHROUGH';
+      const isActive =
+        nextScreen === 'PLAYING' || nextScreen === 'COLLAPSE_BREAKTHROUGH';
+      if (wasActive && !isActive) {
+        flushPlayTime();
+        activePlayStartRef.current = null;
+      } else if (!wasActive && isActive) {
+        activePlayStartRef.current = Date.now();
+      }
+      gameRef.current.screen = nextScreen;
+      setScreen(nextScreen);
+      if (nextScreen !== 'COLLAPSE_BREAKTHROUGH') {
+        resumeMainLoopRef.current?.();
+      }
+    },
+    [flushPlayTime]
+  );
 
   const requestLockSafe = useCallback(() => {
     soundFX.init();
@@ -368,9 +431,7 @@ export function App() {
           lockPromise.catch(() => {});
         }
       }
-    } catch {
-      // Fallback transparent
-    }
+    } catch {}
   }, []);
 
   const exitLockSafe = useCallback(() => {
@@ -382,13 +443,45 @@ export function App() {
     if (document.pointerLockElement) {
       try {
         document.exitPointerLock();
-      } catch {
-        // Ignore
-      }
+      } catch {}
     }
   }, []);
 
-  // Fix activePowersCount so both SAVE_WORLD (transcendent mode) and RULE_WORLD keep all 10 powers in post-game
+  useEffect(() => {
+    const unsubscribe = cielBridge.registerHostHandlers({
+      onInit: (payload) => {
+        if (payload.storageNamespace) {
+          setStorageNamespace(payload.storageNamespace);
+          setSaves(getAllSaves());
+          setProgressionState(SaveManager.getState());
+        }
+        if (payload.embedMode) {
+          setIsEmbedMode(true);
+        }
+        if (typeof payload.muted === 'boolean' || typeof payload.volume === 'number') {
+          const muted = Boolean(payload.muted);
+          soundFX.setAudioConfig(muted, payload.volume);
+          setSoundEnabled(!muted);
+        }
+        cielBridge.emitReady();
+      },
+      onAudio: (payload) => {
+        const muted =
+          typeof payload.muted === 'boolean' ? payload.muted : !soundFX.enabled;
+        soundFX.setAudioConfig(muted, payload.volume);
+        setSoundEnabled(!muted);
+      },
+      onShutdown: () => {
+        flushPlayTime();
+        soundFX.silenceAll();
+        exitLockSafe();
+        shutdownMainLoopRef.current?.();
+      },
+    });
+    cielBridge.emitReady();
+    return unsubscribe;
+  }, [exitLockSafe, flushPlayTime]);
+
   const getActivePowersCount = () => {
     const st = gameRef.current;
     if (st.endingChoice === 'SAVE_WORLD') return 10;
@@ -658,13 +751,11 @@ export function App() {
     setPlayerStats((prev) => ({
       ...prev,
       health: 100,
-      maxHealth: 100,
       stamina: 100,
       oxygen: 100,
       arrows: 20,
-      maxArrows: 20,
       equippedWeapon: 'SWORD',
-      activePowers: completedOrbs.length,
+      activePowersCount: completedOrbs.length,
       endingChoice: 'NONE',
     }));
 
@@ -773,13 +864,11 @@ export function App() {
     setPlayerStats((prev) => ({
       ...prev,
       health: 100,
-      maxHealth: 100,
       stamina: 100,
       oxygen: 100,
       arrows: 20,
-      maxArrows: 20,
       equippedWeapon: 'SWORD',
-      activePowers: completedOrbs.length,
+      activePowersCount: completedOrbs.length,
       endingChoice: 'SAVE_WORLD',
     }));
 
@@ -838,7 +927,10 @@ export function App() {
     st.collapseGlitchSoundTimer = 0;
 
     if (st.sceneRef) {
-      st.visualEffects.forEach((fx) => st.sceneRef?.remove(fx.mesh));
+      st.visualEffects.forEach((fx) => {
+        st.sceneRef?.remove(fx.mesh);
+        disposeObject3D(fx.mesh);
+      });
     }
     st.visualEffects = [];
 
@@ -908,6 +1000,7 @@ export function App() {
     soundFX.playVoidDimensionSeal();
     soundFX.playCinematicChord(2, true);
     updateScreen('COLLAPSE_BREAKTHROUGH');
+    resumeMainLoopRef.current?.();
   }, [exitLockSafe, updateScreen]);
 
   const setupAlterEgoArena = useCallback(
@@ -1206,6 +1299,7 @@ export function App() {
           return;
         }
 
+        emitEndingToHost('good_celestial');
         st.isDimensionalClashActive = false;
         st.timeOfDay = 11.2;
         soundFX.playNovaBlast();
@@ -1252,6 +1346,7 @@ export function App() {
       } else {
         const updatedProgression = SaveManager.setBadEndingCompleted(true);
         setProgressionState(updatedProgression);
+        emitEndingToHost('bad_void');
         st.isDimensionalClashActive = false;
         st.timeOfDay = 18.6;
         soundFX.playBossRoar();
@@ -1300,7 +1395,7 @@ export function App() {
       soundFX.playCinematicChord(2, true);
       performSave(st.activeSlot);
     },
-    [performSave, triggerDimensionalClashCutscene]
+    [emitEndingToHost, performSave, triggerDimensionalClashCutscene]
   );
 
   const handleStartNewGame = useCallback(
@@ -1718,14 +1813,29 @@ export function App() {
   const handleVictoryDesktopMiniGame = useCallback(() => {
     const next = SaveManager.setSecretDesktopEndingCompleted(true);
     setProgressionState(next);
+    emitEndingToHost('secret_chained');
     handleReturnToMainMenu();
     showToast('FIN SECRÈTE VALIDÉE : Anomalies Soumises et Verrouillées dans le Noyau !');
-  }, [handleReturnToMainMenu, showToast]);
+  }, [emitEndingToHost, handleReturnToMainMenu, showToast]);
+
+  const handleEpilogueCompleted = useCallback(() => {
+    const next = SaveManager.setSecretEpilogueEndingCompleted(true);
+    setProgressionState(next);
+    emitEndingToHost('secret_epilogue');
+  }, [emitEndingToHost]);
+
+  const handleRequestHostExit = useCallback(() => {
+    flushPlayTime();
+    soundFX.silenceAll();
+    exitLockSafe();
+    cielBridge.emitRequestExit();
+  }, [exitLockSafe, flushPlayTime]);
 
   const handleRestartTransition3D = useCallback(() => {
     gameRef.current.collapseTimer = 0;
     setCollapseTime(0);
     setDesktopMiniGameMode('TRANSITION');
+    resumeMainLoopRef.current?.();
   }, []);
 
   const handleTestFloorTearTransition = useCallback(() => {
@@ -2054,13 +2164,14 @@ export function App() {
             boss.defeated = true;
             boss.active = false;
             boss.group.visible = false;
+            cielBridge.emitMilestone('MALAKOR_DEFEATED', 10, getElapsedSessionSec());
             showToast('MALAKOR VAINCU ! Le Réceptacle des 10 Orbes est libéré !');
             startOutroCutscene();
           }
         }
       }
     }
-  }, [showToast, startOutroCutscene]);
+  }, [getElapsedSessionSec, showToast, startOutroCutscene]);
 
   const triggerTimeShift = useCallback(() => {
     const st = gameRef.current;
@@ -2227,9 +2338,36 @@ export function App() {
         }
       });
 
+      const boss = st.bossInstance;
+      if (boss && boss.active && !boss.defeated) {
+        const distBoss = Math.hypot(
+          boss.position.x - st.playerPos.x,
+          boss.position.z - st.playerPos.z
+        );
+        if (distBoss < 25.0) {
+          disintegrated++;
+          const cosmicBossDamage = 195;
+          if (st.isDimensionalClashActive && bossDamageHandlerRef.current) {
+            bossDamageHandlerRef.current(cosmicBossDamage, 0, 0);
+          } else {
+            boss.hp = Math.max(0, boss.hp - cosmicBossDamage);
+            if (boss.hp <= 0) {
+              boss.defeated = true;
+              boss.active = false;
+              boss.group.visible = false;
+              soundFX.playEnemyHit(true);
+              cielBridge.emitMilestone('MALAKOR_DEFEATED', 10, getElapsedSessionSec());
+              showToast('MALAKOR VAINCU ! Le Réceptacle des 10 Orbes est libéré !');
+              startOutroCutscene();
+              return;
+            }
+          }
+        }
+      }
+
       if (disintegrated > 0) {
         soundFX.playEnemyHit(true);
-        showToast(`Jugement du Cosmos : ${disintegrated} cible(s) désintégrée(s) en poussière d’or !`);
+        showToast(`Jugement du Cosmos : ${disintegrated} cible(s) frappée(s) par la Supernova !`);
       } else {
         showToast('Jugement du Cosmos : Supernova Céleste déchaînée !');
       }
@@ -2268,9 +2406,36 @@ export function App() {
         }
       });
 
+      const boss = st.bossInstance;
+      if (boss && boss.active && !boss.defeated) {
+        const distBoss = Math.hypot(
+          boss.position.x - st.playerPos.x,
+          boss.position.z - st.playerPos.z
+        );
+        if (distBoss < 22.0) {
+          annihilated++;
+          const riftBossDamage = 180;
+          if (st.isDimensionalClashActive && bossDamageHandlerRef.current) {
+            bossDamageHandlerRef.current(riftBossDamage, 0, 0);
+          } else {
+            boss.hp = Math.max(0, boss.hp - riftBossDamage);
+            if (boss.hp <= 0) {
+              boss.defeated = true;
+              boss.active = false;
+              boss.group.visible = false;
+              soundFX.playEnemyHit(true);
+              cielBridge.emitMilestone('MALAKOR_DEFEATED', 10, getElapsedSessionSec());
+              showToast('MALAKOR VAINCU ! Le Réceptacle des 10 Orbes est libéré !');
+              startOutroCutscene();
+              return;
+            }
+          }
+        }
+      }
+
       if (annihilated > 0) {
         soundFX.playEnemyHit(true);
-        showToast(`Fissure de la Réalité : ${annihilated} Survivant(s) annihilé(s) !`);
+        showToast(`Fissure de la Réalité : ${annihilated} cible(s) annihilée(s) !`);
       } else {
         showToast('Fissure de la Réalité : L’espace-temps se brise sous votre volonté !');
       }
@@ -2341,6 +2506,7 @@ export function App() {
             boss.active = false;
             boss.group.visible = false;
             soundFX.playEnemyHit(true);
+            cielBridge.emitMilestone('MALAKOR_DEFEATED', 10, getElapsedSessionSec());
             showToast('MALAKOR VAINCU ! Le Réceptacle des 10 Orbes est libéré !');
             startOutroCutscene();
             return;
@@ -2353,15 +2519,12 @@ export function App() {
       soundFX.playEnemyHit(true);
       showToast(`Nova Solaire : ${hitCount} cible(s) foudroyée(s) !`);
     }
-  }, [showToast, startOutroCutscene]);
+  }, [getElapsedSessionSec, showToast, startOutroCutscene]);
 
   useEffect(() => {
     const container = mountRef.current;
     if (!container) return;
 
-    // ============================================================================
-    // 1. ARCHITECTURE & RENDU THREE.JS
-    // ============================================================================
     const scene = new THREE.Scene();
     gameRef.current.sceneRef = scene;
 
@@ -2447,9 +2610,6 @@ export function App() {
     const starField = new THREE.Points(starsGeo, starsMat);
     scene.add(starField);
 
-    // ============================================================================
-    // 2. GÉNÉRATION DE L'OPEN WORLD + COLLIDERS (Arbres & Rochers)
-    // ============================================================================
     const segments = 220;
     const terrainGeo = new THREE.PlaneGeometry(
       WORLD_SIZE,
@@ -2665,9 +2825,6 @@ export function App() {
     }
     scene.add(rockInstanced);
 
-    // ============================================================================
-    // 3. CAMPS ENNEMIS, CAISSES DE FLÈCHES, MARAUDEURS, BOSS & TRÔNE DU SOUVERAIN
-    // ============================================================================
     gameRef.current.enemyInstances = [];
     gameRef.current.lootInstances = [];
     gameRef.current.arrowProjectiles = [];
@@ -2756,9 +2913,6 @@ export function App() {
     scene.add(fallingReceptacle);
     gameRef.current.fallingReceptacleMesh = fallingReceptacle;
 
-    // ============================================================================
-    // 4. PERSONNAGE HUMANOÏDE ARTICULÉ ("L'Arpenteur d'Aetheria")
-    // ============================================================================
     const humanoid = createHumanoidCharacter();
     const playerGroup = humanoid.group;
     scene.add(playerGroup);
@@ -3006,9 +3160,6 @@ export function App() {
 
     gameRef.current.resetSceneWireframe = () => setSceneWireframeMode(false);
 
-    // ============================================================================
-    // 5. ORBES & MONUMENT DE CONVERGENCE FINALE
-    // ============================================================================
     gameRef.current.orbMeshes = [];
 
     const sharedPedestalGeo = new THREE.CylinderGeometry(0.65, 0.95, 1.2, 6);
@@ -3146,9 +3297,6 @@ export function App() {
     scene.add(finaleGroup);
     gameRef.current.finaleMonumentGroup = finaleGroup;
 
-    // ============================================================================
-    // 6. SYSTÈME DE COMBAT : FLÈCHE BALISTIQUE OU TIR DE MINI-ÉCLAIRS ROUGES (MAUVAISE FIN)
-    // ============================================================================
     const crosshairRaycaster = new THREE.Raycaster();
     const centerScreenNDC = new THREE.Vector2(0, 0);
 
@@ -3162,11 +3310,14 @@ export function App() {
       st.bowAutoReleaseOnFull = false;
 
       if (!isCorrupted && !isTranscendent) {
-        if (st.arrows > 1) {
-          st.arrows -= 1;
-        } else {
-          st.arrows = 12;
+        if (st.arrows <= 0) {
+          st.isDrawingBow = false;
+          st.isRightClickAiming = false;
+          st.bowDrawProgress = 0;
+          showToast('Plus de flèches ! Collectez des caisses ou atteignez 8 Orbes (Carquois Céleste).');
+          return;
         }
+        st.arrows = Math.max(0, st.arrows - 1);
       }
       st.bowCooldownTimer = 0.16;
       st.bowReleaseAnimTimer = 0.18;
@@ -3295,6 +3446,12 @@ export function App() {
         soundFX.playSwordSwing();
       } else {
         st.equippedWeapon = 'BOW';
+        const hasInfiniteAmmo =
+          st.endingChoice === 'RULE_WORLD' || st.endingChoice === 'SAVE_WORLD';
+        if (!hasInfiniteAmmo && st.arrows <= 0) {
+          showToast('Plus de flèches ! Collectez des caisses ou atteignez 8 Orbes (Carquois Céleste).');
+          return;
+        }
         if (!st.isDrawingBow) {
           st.isDrawingBow = true;
           st.bowDrawProgress = Math.max(st.bowDrawProgress, 0.12);
@@ -3314,17 +3471,36 @@ export function App() {
       }
     };
 
-    // ============================================================================
-    // 7. CONTRÔLES CLAVIER & ROTATION 360° ILLIMITÉE DE LA SOURIS
-    // ============================================================================
     const clearAllMovementKeys = () => {
       gameRef.current.keys = {};
       gameRef.current.isDraggingFallback = false;
       gameRef.current.lastMousePos = null;
       gameRef.current.mouseNDC = { x: 0, y: 0 };
+      gameRef.current.isDrawingBow = false;
+      gameRef.current.isRightClickAiming = false;
+      gameRef.current.bowDrawProgress = 0;
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isTypingTarget =
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable);
+
+      if (
+        !isTypingTarget &&
+        (e.code === 'Space' ||
+          e.code === 'ArrowUp' ||
+          e.code === 'ArrowDown' ||
+          e.code === 'ArrowLeft' ||
+          e.code === 'ArrowRight' ||
+          e.code === 'Tab')
+      ) {
+        e.preventDefault();
+      }
+
       const scr = gameRef.current.screen;
       if (
         scr === 'INTRO_CUTSCENE' ||
@@ -3406,11 +3582,13 @@ export function App() {
 
     const onWindowBlur = () => {
       clearAllMovementKeys();
+      exitLockSafe();
     };
 
     const onVisibilityChange = () => {
       if (document.hidden) {
         clearAllMovementKeys();
+        exitLockSafe();
       }
     };
 
@@ -3476,6 +3654,12 @@ export function App() {
       if (e.button === 2) {
         e.preventDefault();
         const st = gameRef.current;
+        const hasInfiniteAmmo =
+          st.endingChoice === 'RULE_WORLD' || st.endingChoice === 'SAVE_WORLD';
+        if (!hasInfiniteAmmo && st.arrows <= 0) {
+          showToast('Plus de flèches ! Collectez des caisses ou atteignez 8 Orbes (Carquois Céleste).');
+          return;
+        }
         st.equippedWeapon = 'BOW';
         st.attackTimer = 0;
         st.swordHitDealt = false;
@@ -3523,7 +3707,7 @@ export function App() {
     window.addEventListener('wheel', onWheel);
     window.addEventListener('blur', onWindowBlur);
     document.addEventListener('visibilitychange', onVisibilityChange);
-    container.addEventListener('contextmenu', onContextMenu);
+    window.addEventListener('contextmenu', onContextMenu);
     document.addEventListener('pointerlockchange', onPointerLockChange);
     window.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseleave', onMouseLeave);
@@ -3532,9 +3716,6 @@ export function App() {
     window.addEventListener('mouseup', onMouseUp);
     window.addEventListener('resize', onResize);
 
-    // ============================================================================
-    // 8. FONCTIONS DE DÉGÂTS SUR LES ENNEMIS & SUR LE BOSS MALAKOR
-    // ============================================================================
     const damageEnemy = (
       enemy: EnemyInstance3D,
       damage: number,
@@ -3593,6 +3774,7 @@ export function App() {
 
       if (gameRef.current.isDimensionalClashActive) {
         if (boss.hp <= 0) {
+          cielBridge.emitMilestone('ALTER_EGO_DEFEATED', 10, getElapsedSessionSec());
           triggerCollapseBreakthrough();
           return;
         }
@@ -3662,6 +3844,7 @@ export function App() {
           boss.active = false;
           boss.group.visible = false;
           soundFX.playEnemyHit(true);
+          cielBridge.emitMilestone('MALAKOR_DEFEATED', 10, getElapsedSessionSec());
           showToast('MALAKOR TERRASSÉ ! Le Réceptacle des 10 Orbes est à vous !');
           startOutroCutscene();
         } else {
@@ -3676,10 +3859,9 @@ export function App() {
       }
     };
 
-    // ============================================================================
-    // 9. BOUCLE DE SIMULATION PHYSIQUE, CINÉMATIQUES & RENDU TEMPS RÉEL
-    // ============================================================================
-    let animationFrameId: number;
+    let animationFrameId = 0;
+    let isLoopRunning = false;
+    let isShutDown = false;
     let prevTime = performance.now();
     let hudSyncTimer = 0;
     let voidRumbleTimer = 0;
@@ -3695,13 +3877,43 @@ export function App() {
     const underwaterFogColor = new THREE.Color(0x0369a1);
     const currentSkyColor = new THREE.Color();
 
+    const stopLoop = () => {
+      isLoopRunning = false;
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = 0;
+      }
+    };
+
+    const startLoop = () => {
+      if (isLoopRunning || isShutDown) return;
+      isLoopRunning = true;
+      prevTime = performance.now();
+      animationFrameId = requestAnimationFrame(animate);
+    };
+
+    resumeMainLoopRef.current = startLoop;
+    shutdownMainLoopRef.current = () => {
+      if (isShutDown) return;
+      isShutDown = true;
+      stopLoop();
+      disposeObject3D(scene);
+      renderer.dispose();
+    };
+
     const animate = (now: number) => {
+      if (isShutDown || !isLoopRunning) return;
+
+      const state = gameRef.current;
+      if (state.screen === 'COLLAPSE_BREAKTHROUGH' && state.collapseTimer >= 2.95) {
+        stopLoop();
+        return;
+      }
+
       animationFrameId = requestAnimationFrame(animate);
 
       const dt = Math.min((now - prevTime) / 1000, 0.05);
       prevTime = now;
-
-      const state = gameRef.current;
       const isCorruptedRuler = state.endingChoice === 'RULE_WORLD';
       const isTranscendentSavior = state.endingChoice === 'SAVE_WORLD';
 
@@ -3885,11 +4097,11 @@ export function App() {
             }
           }
           scene.remove(fx.mesh);
+          disposeObject3D(fx.mesh);
           state.visualEffects.splice(i, 1);
         }
       }
 
-      // Animation des Orbes
       for (let idx = 0; idx < state.orbs.length; idx++) {
         const orb = state.orbs[idx];
         const meshObj = state.orbMeshes[idx];
@@ -3929,7 +4141,6 @@ export function App() {
         });
       }
 
-      // --- A. ÉCRAN MENU PRINCIPAL ---
       if (state.screen === 'MAIN_MENU') {
         fpViewModel.group.visible = false;
         scene.background = currentSkyColor;
@@ -3971,7 +4182,6 @@ export function App() {
         return;
       }
 
-      // --- B. CINÉMATIQUE D'INTRODUCTION ---
       if (state.screen === 'INTRO_CUTSCENE') {
         fpViewModel.group.visible = false;
         scene.background = currentSkyColor;
@@ -4051,7 +4261,6 @@ export function App() {
         return;
       }
 
-      // --- C. CINÉMATIQUE D'APPARITION DU BOSS ---
       if (state.screen === 'BOSS_CUTSCENE') {
         fpViewModel.group.visible = false;
         scene.background = currentSkyColor;
@@ -4155,7 +4364,6 @@ export function App() {
         return;
       }
 
-      // --- D. CINÉMATIQUE DE FIN ---
       if (state.screen === 'OUTRO_CUTSCENE') {
         fpViewModel.group.visible = false;
 
@@ -4645,9 +4853,8 @@ export function App() {
           floorShatterGroup.visible = false;
           playerGroup.visible = false;
           alterEgo.group.visible = false;
-          camera.up.set(0, 1, 0);
-          camera.position.set(0, cY + 2.2, 5.5);
-          camera.lookAt(0, cY + 1.5, 0);
+          stopLoop();
+          return;
         }
 
         renderer.render(scene, camera);
@@ -4697,7 +4904,6 @@ export function App() {
         return;
       }
 
-      // --- E. GAMEPLAY ACTIF (PLAYING) ---
       if (state.screen === 'PLAYING') {
         const orbsCollectedCount = state.orbs.filter((o) => o.collected).length;
         const activePowers = getActivePowersCount();
@@ -5004,7 +5210,6 @@ export function App() {
           }
         }
 
-        // --- MISE À JOUR DE LA CAMÉRA ---
         const horizontalSpeed = Math.hypot(
           state.playerVel.x,
           state.playerVel.z
@@ -5058,7 +5263,6 @@ export function App() {
           camera.updateProjectionMatrix();
         }
 
-        // --- MISE À JOUR DU PERSONNAGE JOUEUR (3P) & VIEWMODEL (1P) ---
         const damageMultiplier = isCorruptedRuler || isTranscendentSavior ? 2.0 : activePowers >= 5 ? 1.5 : 1.0;
 
         let attackProgress = 0;
@@ -5367,11 +5571,11 @@ export function App() {
           if (hitSomething || arrow.position.y <= terrainY || arrow.age > 5.0) {
             arrow.active = false;
             scene.remove(arrow.mesh);
+            disposeObject3D(arrow.mesh);
             state.arrowProjectiles.splice(i, 1);
           }
         }
 
-        // --- IA & COMBAT DU BOSS TITAN MALAKOR ---
         const boss = state.bossInstance;
         if (boss && boss.active && !boss.defeated) {
           if (state.isDimensionalClashActive) {
@@ -5967,7 +6171,6 @@ export function App() {
           }
         });
 
-        // --- RAMASSAGE DES CAISSES DE FLÈCHES & BUTIN ---
         state.lootInstances.forEach((loot) => {
           if (loot.collected) return;
           loot.group.rotation.y += dt * 1.4;
@@ -5994,7 +6197,6 @@ export function App() {
           fog.density = 0.0024;
         }
 
-        // Détection de proximité des Orbes (ou direction du Boss si les 10 Orbes sont collectées)
         let nearestDist: number | null = null;
         let nearestAngle: number | null = null;
 
@@ -6032,6 +6234,7 @@ export function App() {
 
               const collectedCount = state.orbs.filter((o) => o.collected).length;
               soundFX.playOrbCollect(collectedCount);
+              cielBridge.emitMilestone('ORB_COLLECTED', collectedCount, getElapsedSessionSec());
 
               applyEnemyPowerScaling(collectedCount);
               const powerMsg =
@@ -6055,7 +6258,6 @@ export function App() {
           }
         }
 
-        // Synchronisation HUD & Minimap (50ms)
         hudSyncTimer += dt;
         if (hudSyncTimer >= 0.05) {
           hudSyncTimer = 0;
@@ -6146,17 +6348,20 @@ export function App() {
       }
     };
 
-    animationFrameId = requestAnimationFrame(animate);
+    startLoop();
 
     return () => {
+      resumeMainLoopRef.current = null;
+      shutdownMainLoopRef.current = null;
       bossDamageHandlerRef.current = null;
-      cancelAnimationFrame(animationFrameId);
+      isShutDown = true;
+      stopLoop();
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('wheel', onWheel);
       window.removeEventListener('blur', onWindowBlur);
       document.removeEventListener('visibilitychange', onVisibilityChange);
-      container.removeEventListener('contextmenu', onContextMenu);
+      window.removeEventListener('contextmenu', onContextMenu);
       document.removeEventListener('pointerlockchange', onPointerLockChange);
       window.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseleave', onMouseLeave);
@@ -6164,12 +6369,14 @@ export function App() {
       container.removeEventListener('mousedown', onMouseDown);
       window.removeEventListener('mouseup', onMouseUp);
       window.removeEventListener('resize', onResize);
+      disposeObject3D(scene);
       renderer.dispose();
     };
   }, [
     applyEnemyPowerScaling,
     exitLockSafe,
     finishCutscene,
+    getElapsedSessionSec,
     handleNextCutsceneStep,
     handlePrevCutsceneStep,
     handleOpenPauseMenu,
@@ -6318,6 +6525,10 @@ export function App() {
         badEndingCompleted={progressionState.badEndingCompleted}
         goodEndingCompleted={progressionState.goodEndingCompleted}
         secretDesktopEndingCompleted={progressionState.secretDesktopEndingCompleted}
+        secretEpilogueEndingCompleted={progressionState.secretEpilogueEndingCompleted}
+        isEmbedMode={isEmbedMode}
+        onEpilogueCompleted={handleEpilogueCompleted}
+        onRequestHostExit={handleRequestHostExit}
         onStartNewGame={handleStartNewGame}
         onLoadGame={handleLoadGame}
         onSaveCurrentGame={performSave}

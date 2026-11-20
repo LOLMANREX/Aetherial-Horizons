@@ -17,6 +17,8 @@ import {
   Navigation,
 } from 'lucide-react';
 import { soundFX } from '../utils/sound';
+import { IS_CIEL_EMBED_BUILD } from '../utils/cielBridge';
+import { disposeObject3D } from '../utils/disposeThree';
 
 export type EpilogueStartSubPhase =
   | 'HANGAR_HUB'
@@ -30,6 +32,8 @@ export type EpilogueStartSubPhase =
 export interface EpilogueMinecraftSequenceProps {
   initialSubPhase?: EpilogueStartSubPhase;
   triggerKey?: number;
+  isEmbedMode?: boolean;
+  onEpilogueCompleted?: () => void;
   onReturnToMainMenu: () => void;
   onRestartFullMiniGame: () => void;
 }
@@ -301,10 +305,16 @@ function createAvatar3DGroup(isCelestial: boolean): {
 export const EpilogueMinecraftSequence: React.FC<EpilogueMinecraftSequenceProps> = ({
   initialSubPhase = 'HANGAR_HUB',
   triggerKey = 0,
+  isEmbedMode = false,
+  onEpilogueCompleted,
   onReturnToMainMenu,
   onRestartFullMiniGame,
 }) => {
+  const embedLocked = IS_CIEL_EMBED_BUILD || isEmbedMode;
   const mount3DRef = useRef<HTMLDivElement | null>(null);
+  const onEpilogueCompletedRef = useRef(onEpilogueCompleted);
+  onEpilogueCompletedRef.current = onEpilogueCompleted;
+  const epilogueNotifiedRef = useRef(false);
 
   const resolveInitialStage = (sub: EpilogueStartSubPhase): SequenceStage => {
     if (sub === 'ELYTRA_FLIGHT_3D') return 'ELYTRA_3D';
@@ -420,6 +430,7 @@ export const EpilogueMinecraftSequence: React.FC<EpilogueMinecraftSequenceProps>
   }, []);
 
   useEffect(() => {
+    epilogueNotifiedRef.current = false;
     const startSt = resolveInitialStage(initialSubPhase);
     const s = sim3DRef.current;
     s.stage = startSt;
@@ -1407,18 +1418,31 @@ export const EpilogueMinecraftSequence: React.FC<EpilogueMinecraftSequenceProps>
     }
 
     const onKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.code === 'Space' ||
+        e.code === 'ArrowUp' ||
+        e.code === 'ArrowDown' ||
+        e.code === 'ArrowLeft' ||
+        e.code === 'ArrowRight' ||
+        e.code === 'Tab'
+      ) {
+        e.preventDefault();
+      }
       sim3DRef.current.keys[e.code] = true;
       if (e.code === 'KeyE') {
         sim3DRef.current.interactRequested = true;
       }
       if (e.code === 'Space' && sim3DRef.current.hologramActive) {
-        e.preventDefault();
         sim3DRef.current.interactRequested = true;
       }
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
       sim3DRef.current.keys[e.code] = false;
+    };
+
+    const onWindowBlur = () => {
+      sim3DRef.current.keys = {};
     };
 
     const onMouseMove = (e: MouseEvent) => {
@@ -1448,6 +1472,7 @@ export const EpilogueMinecraftSequence: React.FC<EpilogueMinecraftSequenceProps>
 
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onWindowBlur);
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('resize', onResize);
 
@@ -1909,6 +1934,10 @@ export const EpilogueMinecraftSequence: React.FC<EpilogueMinecraftSequenceProps>
           soundFX.playCinematicChord(3, true);
           st.stage = 'CONFRONTATION_3D';
           setStage('CONFRONTATION_3D');
+          if (!epilogueNotifiedRef.current) {
+            epilogueNotifiedRef.current = true;
+            onEpilogueCompletedRef.current?.();
+          }
         }
 
         renderer.render(scene, camera);
@@ -1957,13 +1986,16 @@ export const EpilogueMinecraftSequence: React.FC<EpilogueMinecraftSequenceProps>
       cancelAnimationFrame(rafId);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onWindowBlur);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('resize', onResize);
+      disposeObject3D(scene);
       renderer.dispose();
     };
   }, [showQuickToast]);
 
   const handleCompleteComponentQuick = (which: 1 | 2 | 3) => {
+    if (embedLocked) return;
     const st = sim3DRef.current;
     soundFX.init();
     soundFX.playOrbCollect(8);
@@ -1989,7 +2021,10 @@ export const EpilogueMinecraftSequence: React.FC<EpilogueMinecraftSequenceProps>
   };
 
   return (
-    <div className="fixed inset-0 z-[130] bg-black text-white font-mono select-none overflow-hidden">
+    <div
+      onContextMenu={(e) => e.preventDefault()}
+      className="fixed inset-0 z-[130] bg-black text-white font-mono select-none overflow-hidden"
+    >
       <div
         ref={mount3DRef}
         style={
@@ -2088,13 +2123,15 @@ export const EpilogueMinecraftSequence: React.FC<EpilogueMinecraftSequenceProps>
                 >
                   🔒 Stopper &amp; Verrouiller l’Anneau ({lockedRingsCount}/3)
                 </button>
-                <button
-                  type="button"
-                  onClick={() => handleCompleteComponentQuick(2)}
-                  className="px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-400/40 font-bold text-xs cursor-pointer"
-                >
-                  Forcer Alignement
-                </button>
+                {!IS_CIEL_EMBED_BUILD && !embedLocked && (
+                  <button
+                    type="button"
+                    onClick={() => handleCompleteComponentQuick(2)}
+                    className="px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-400/40 font-bold text-xs cursor-pointer"
+                  >
+                    Forcer Alignement
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -2115,7 +2152,7 @@ export const EpilogueMinecraftSequence: React.FC<EpilogueMinecraftSequenceProps>
                 'Explorez le Hangar 3D : récupérez les 3 composants (Parkour, Hologramme, Valves du Réacteur) puis forgez le Virus sur l’Établi Central.'}
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              {!payloadDone && (
+              {!IS_CIEL_EMBED_BUILD && !embedLocked && !payloadDone && (
                 <button
                   type="button"
                   onClick={() => handleCompleteComponentQuick(1)}
@@ -2124,7 +2161,7 @@ export const EpilogueMinecraftSequence: React.FC<EpilogueMinecraftSequenceProps>
                   + Payload
                 </button>
               )}
-              {!zeroDayDone && (
+              {!IS_CIEL_EMBED_BUILD && !embedLocked && !zeroDayDone && (
                 <button
                   type="button"
                   onClick={() => handleCompleteComponentQuick(3)}
@@ -2441,17 +2478,19 @@ export const EpilogueMinecraftSequence: React.FC<EpilogueMinecraftSequenceProps>
                     <div className="text-xs font-mono font-black text-rose-400">
                       PV Virus : {Math.round(virusHp)}%
                     </div>
-                    <button
-                      type="button"
-                      onClick={(ev) => {
-                        ev.stopPropagation();
-                        desktopCombatRef.current.virusShield = 0;
-                        desktopCombatRef.current.virusHp = 0;
-                      }}
-                      className="pointer-events-auto px-3 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-mono font-black text-[10px] uppercase cursor-pointer"
-                    >
-                      Purger Virus &rarr; Vol Élytres 3D
-                    </button>
+                    {!IS_CIEL_EMBED_BUILD && !embedLocked && (
+                      <button
+                        type="button"
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          desktopCombatRef.current.virusShield = 0;
+                          desktopCombatRef.current.virusHp = 0;
+                        }}
+                        className="pointer-events-auto px-3 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-mono font-black text-[10px] uppercase cursor-pointer"
+                      >
+                        Purger Virus &rarr; Vol Élytres 3D
+                      </button>
+                    )}
                   </div>
                 </div>
 

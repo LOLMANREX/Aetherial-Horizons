@@ -1,12 +1,10 @@
 {
-  "name": "aetherial-horizons-3d-open-world",
-  "workspaces": ["frontend", "backend"], 
+  "name": "aetheria-exe",
+  "workspaces": ["frontend"],
   "scripts": {
-    "dev-frontend": "npm run dev --prefix frontend",
-    "dev-backend": "npm run dev --prefix backend",
-    "dev": "concurrently \"npm run dev-frontend\" \"npm run dev-backend\""
-  },
-  "devDependencies": {
-    "concurrently": "latest"
+    "dev": "npm run dev --prefix frontend",
+    "build": "npm run build --prefix frontend",
+    "build:embed": "VITE_CIEL_EMBED=true npm run build --prefix frontend",
+    "preview": "npm run preview --prefix frontend"
   }
 }

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { SaveSlotData, GameScreen, EndingChoice } from '../types';
+import { IS_CIEL_EMBED_BUILD } from '../utils/cielBridge';
 import {
   DesktopInvasionMiniGame,
   DesktopMiniGameInitialMode,
@@ -56,6 +57,10 @@ interface MainMenuProps {
   badEndingCompleted?: boolean;
   goodEndingCompleted?: boolean;
   secretDesktopEndingCompleted?: boolean;
+  secretEpilogueEndingCompleted?: boolean;
+  isEmbedMode?: boolean;
+  onEpilogueCompleted?: () => void;
+  onRequestHostExit?: () => void;
   onSimulateBadEndingCompleted?: () => void;
   onTestDimensionalClash?: () => void;
   onResetAllSaves?: () => void;
@@ -108,6 +113,10 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   badEndingCompleted = false,
   goodEndingCompleted = false,
   secretDesktopEndingCompleted = false,
+  secretEpilogueEndingCompleted = false,
+  isEmbedMode = false,
+  onEpilogueCompleted,
+  onRequestHostExit,
   onSimulateBadEndingCompleted,
   onTestDimensionalClash,
   onResetAllSaves,
@@ -143,9 +152,12 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   const [debugPinError, setDebugPinError] = useState(false);
   const [debugStatusMessage, setDebugStatusMessage] = useState<string | null>(null);
 
+  const embedLocked = IS_CIEL_EMBED_BUILD || isEmbedMode;
+
   const handleValidateDebugPin = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (debugPinInput.trim() === '1102') {
+    if (embedLocked) return;
+    if (!IS_CIEL_EMBED_BUILD && debugPinInput.trim() === '1102') {
       setIsDebugUnlocked(true);
       setDebugPinError(false);
     } else {
@@ -189,7 +201,9 @@ export const MainMenu: React.FC<MainMenuProps> = ({
       <DesktopInvasionMiniGame
         initialMode={desktopMiniGameMode}
         triggerKey={desktopMiniGameTriggerKey}
+        isEmbedMode={embedLocked}
         onVictoryReturnToMenu={onVictoryDesktopMiniGame || onReturnToMainMenu}
+        onEpilogueCompleted={onEpilogueCompleted}
         onReturnToMainMenu={onReturnToMainMenu}
         onRestartTransition3D={onRestartTransition3D}
       />
@@ -308,20 +322,35 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-950/75 backdrop-blur-md p-4 pointer-events-auto">
-      <div className="bg-slate-900/95 border border-slate-800 rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl">
-        <div className="text-center mb-6">
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-950/75 backdrop-blur-md p-3 sm:p-4 pointer-events-auto">
+      <div className="bg-slate-900/95 border border-slate-800 rounded-3xl max-w-xl w-full max-h-[92vh] overflow-y-auto p-5 sm:p-7 shadow-2xl">
+        <div className="text-center mb-5">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-semibold mb-2">
             <Sparkles className="w-3.5 h-3.5" />
             {screen === 'PAUSED' ? `PAUSE • ${orbsCollected}/${totalOrbs} ORBES` : 'EXPLORATION & POUVOIRS 3D OPEN WORLD'}
           </div>
-          <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white">
-            AETHERIAL HORIZONS
-          </h1>
-          {secretDesktopEndingCompleted && (
-            <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400/15 border border-amber-400/40 text-amber-300 text-[11px] font-bold">
-              <Trophy className="w-3.5 h-3.5 text-amber-300" />
-              Succès Secret : Dompteur du 4ème Mur (Desktop Pets Asservis)
+          <div className="flex items-baseline justify-center gap-2.5 flex-wrap">
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white font-mono">
+              AETHERIA.EXE
+            </h1>
+            <span className="px-2 py-0.5 rounded-md bg-slate-800/90 border border-slate-700 text-[10px] font-mono font-bold text-slate-400 tracking-wider uppercase">
+              Build 1102
+            </span>
+          </div>
+          {(secretDesktopEndingCompleted || secretEpilogueEndingCompleted) && (
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
+              {secretDesktopEndingCompleted && (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400/15 border border-amber-400/40 text-amber-300 text-[11px] font-bold">
+                  <Trophy className="w-3.5 h-3.5 text-amber-300" />
+                  Succès Secret : Geôlier du Noyau (Desktop Pets)
+                </div>
+              )}
+              {secretEpilogueEndingCompleted && (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-400/15 border border-emerald-400/40 text-emerald-300 text-[11px] font-bold">
+                  <Trophy className="w-3.5 h-3.5 text-emerald-300" />
+                  Succès Secret : Survivant System32 (Épilogue)
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -461,6 +490,16 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                   <Settings className="w-4 h-4 text-amber-400" />
                   Options
                 </button>
+
+                {embedLocked && onRequestHostExit && (
+                  <button
+                    onClick={onRequestHostExit}
+                    className="w-full py-3 rounded-2xl bg-slate-950/70 hover:bg-rose-950/40 text-slate-400 hover:text-rose-300 font-semibold text-sm flex items-center justify-center gap-2 border border-slate-800/80 transition-all cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                    Fermer AETHERIA.EXE
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -638,8 +677,8 @@ export const MainMenu: React.FC<MainMenuProps> = ({
       </div>
 
       {isOptionsOpen && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/85 backdrop-blur-xl p-4 pointer-events-auto">
-          <div className="bg-slate-900 border border-slate-700/80 rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl space-y-6">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/85 backdrop-blur-xl p-3 sm:p-4 pointer-events-auto">
+          <div className="bg-slate-900 border border-slate-700/80 rounded-3xl max-w-lg w-full max-h-[92vh] overflow-y-auto p-5 sm:p-7 shadow-2xl space-y-5">
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-amber-400/15 border border-amber-400/30 flex items-center justify-center text-amber-300">
@@ -647,7 +686,11 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                 </div>
                 <div>
                   <h2 className="text-xl font-black text-white">Options</h2>
-                  <p className="text-xs text-slate-400">Paramètres généraux et accès développeur</p>
+                  <p className="text-xs text-slate-400">
+                    {embedLocked
+                      ? 'Paramètres audio et caméra'
+                      : 'Paramètres généraux et accès développeur'}
+                  </p>
                 </div>
               </div>
               <button
@@ -696,6 +739,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
               </div>
             </div>
 
+            {!IS_CIEL_EMBED_BUILD && !embedLocked && (
             <div className="p-4 rounded-2xl bg-slate-950/90 border border-slate-800 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
@@ -764,6 +808,12 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                       secretDesktopEnding :{' '}
                       <strong className={secretDesktopEndingCompleted ? 'text-emerald-400' : 'text-slate-500'}>
                         {secretDesktopEndingCompleted ? 'TRUE' : 'FALSE'}
+                      </strong>
+                    </span>
+                    <span className="text-slate-300">
+                      secretEpilogueEnding :{' '}
+                      <strong className={secretEpilogueEndingCompleted ? 'text-cyan-400' : 'text-slate-500'}>
+                        {secretEpilogueEndingCompleted ? 'TRUE' : 'FALSE'}
                       </strong>
                     </span>
                   </div>
@@ -1096,6 +1146,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                 </div>
               )}
             </div>
+            )}
 
             <button
               onClick={() => setIsOptionsOpen(false)}

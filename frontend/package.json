@@ -1,7 +1,7 @@
 {
-  "name": "aetherial-horizons-3d-open-world-frontend",
+  "name": "aetheria-exe-frontend",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.1.02",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,19 +9,19 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "firebase": "latest",
-    "framer-motion": "latest",
     "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
     "three": "latest"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.1.0",
     "@types/node": "latest",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/three": "^0.186.0",
     "@vitejs/plugin-react": "latest",
+    "tailwindcss": "^4.1.0",
     "typescript": "latest",
     "vite": "latest"
   }

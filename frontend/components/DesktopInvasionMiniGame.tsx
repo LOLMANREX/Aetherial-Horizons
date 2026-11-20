@@ -47,7 +47,9 @@ export type DesktopMiniGameInitialMode =
 export interface DesktopInvasionMiniGameProps {
   initialMode?: DesktopMiniGameInitialMode;
   triggerKey?: number;
+  isEmbedMode?: boolean;
   onVictoryReturnToMenu: () => void;
+  onEpilogueCompleted?: () => void;
   onReturnToMainMenu: () => void;
   onRestartTransition3D?: () => void;
 }
@@ -220,7 +222,9 @@ const DISSOLVE_PIXEL_BLOCKS = Array.from({ length: 26 }, (_, i) => ({
 export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = ({
   initialMode = 'TRANSITION',
   triggerKey = 0,
+  isEmbedMode = false,
   onVictoryReturnToMenu,
+  onEpilogueCompleted,
   onReturnToMainMenu,
   onRestartTransition3D,
 }) => {
@@ -581,7 +585,10 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
     [spawnFloatingText]
   );
 
+  const isEpilogueActive = phase === 'EPILOGUE_SEQUENCE';
+
   useEffect(() => {
+    if (isEpilogueActive) return;
     let rafId: number;
     let lastTime = performance.now();
 
@@ -997,13 +1004,15 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [spawnFloatingText]);
+  }, [spawnFloatingText, isEpilogueActive]);
 
   if (phase === 'EPILOGUE_SEQUENCE') {
     return (
       <EpilogueMinecraftSequence
         initialSubPhase={epilogueSubPhase}
         triggerKey={triggerKey}
+        isEmbedMode={isEmbedMode}
+        onEpilogueCompleted={onEpilogueCompleted}
         onReturnToMainMenu={onReturnToMainMenu}
         onRestartFullMiniGame={handleRestartMiniGame}
       />
@@ -1068,6 +1077,7 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
   return (
     <div
       onMouseMove={handleMouseMoveDesktop}
+      onContextMenu={(e) => e.preventDefault()}
       className="fixed inset-0 z-50 select-none overflow-hidden font-sans flex flex-col justify-between cursor-none"
       style={{
         background:
@@ -1210,7 +1220,7 @@ export const DesktopInvasionMiniGame: React.FC<DesktopInvasionMiniGameProps> = (
                 <div className="bg-gradient-to-r from-red-900 via-orange-700 to-amber-600 px-4 py-2 rounded-t-xl border-b-2 border-orange-300 flex items-center justify-between text-xs font-mono font-black text-white shadow-lg">
                   <span className="flex items-center gap-2">
                     <Flame className="w-4 h-4 text-yellow-300 animate-bounce" />
-                    Aetherial_Horizons.exe — [EMBRASEMENT &amp; DISSOLUTION PIXELS]
+                    AETHERIA.EXE — [EMBRASEMENT &amp; DISSOLUTION PIXELS]
                   </span>
                   <div className="flex items-center gap-1.5">
                     <span className="px-1.5 py-0.5 bg-black/40 rounded text-[10px]">
